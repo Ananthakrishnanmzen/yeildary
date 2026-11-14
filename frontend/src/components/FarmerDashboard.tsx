@@ -24,6 +24,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { fetchFarmerTelemetryApi, fetchFarmerTerrainApi } from '../services/api';
 import type { TelemetryReport, TerrainReport } from '../types/farmer';
+import RotationStrategyModule from './RotationStrategyModule';
 
 export default function FarmerDashboard() {
   const { profile, refreshProfile, logout } = useAuth();
@@ -92,7 +93,7 @@ export default function FarmerDashboard() {
     return null;
   }
 
-  const delta = 0.02;
+  const delta = 0.03;
   const minLon = (profile.longitude - delta).toFixed(6);
   const minLat = (profile.latitude - delta).toFixed(6);
   const maxLon = (profile.longitude + delta).toFixed(6);
@@ -631,6 +632,9 @@ export default function FarmerDashboard() {
             </div>
           )}
         </section>
+
+        {/* Row 4: Module 3 Global Rotation Strategy & AI Decision Engine */}
+        <RotationStrategyModule profile={profile} telemetry={telemetry} terrain={terrain} />
       </main>
     </div>
   );

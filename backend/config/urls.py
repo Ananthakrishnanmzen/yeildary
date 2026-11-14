@@ -8,5 +8,6 @@ urlpatterns = [
     path('api/', include('accounts.urls')),
     path('api/', include('telemetry.urls')),
     path('api/', include('terrain.urls')),
+    path('api/', include('rotation.urls')),
     path('', include('Farmer.urls')),
 ]

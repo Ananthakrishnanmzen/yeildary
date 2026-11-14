@@ -48,6 +48,13 @@ function extractApiError(err: unknown, fallback: string): string {
     const data = err.response?.data as Record<string, unknown> | undefined;
     if (data) {
       if (typeof data.detail === 'string') return data.detail;
+      if (typeof data.error === 'string' && data.error) return data.error;
+      if (data.errors && typeof data.errors === 'object') {
+        for (const errs of Object.values(data.errors as Record<string, unknown>)) {
+          if (Array.isArray(errs) && typeof errs[0] === 'string') return errs[0];
+          if (typeof errs === 'string') return errs;
+        }
+      }
       if (Array.isArray(data.non_field_errors) && typeof data.non_field_errors[0] === 'string') {
         return data.non_field_errors[0];
       }

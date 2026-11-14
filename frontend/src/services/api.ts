@@ -1,5 +1,12 @@
 import axios from 'axios';
-import type { FarmerProfile, RegisterPayload, TelemetryReport, TerrainReport } from '../types/farmer';
+import type {
+  ConstraintWeights,
+  FarmerProfile,
+  Module3StrategyResponse,
+  RegisterPayload,
+  TelemetryReport,
+  TerrainReport,
+} from '../types/farmer';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
@@ -129,5 +136,28 @@ export async function fetchFarmerTerrainApi(refresh = false): Promise<TerrainRep
     params: refresh ? { refresh: '1' } : undefined,
     timeout: 90000,
   });
+  return data;
+}
+
+export async function fetchModule3StrategyApi(refresh = false): Promise<Module3StrategyResponse> {
+  const { data } = await apiClient.get<Module3StrategyResponse>('/module3/strategy/', {
+    params: refresh ? { refresh: '1' } : undefined,
+    timeout: 30000,
+  });
+  return data;
+}
+
+export async function recalculateModule3StrategyApi(
+  weights: ConstraintWeights,
+  preferredLanguage?: string,
+): Promise<Module3StrategyResponse> {
+  const { data } = await apiClient.post<Module3StrategyResponse>(
+    '/module3/recalculate/',
+    {
+      ...weights,
+      ...(preferredLanguage ? { preferred_language: preferredLanguage } : {}),
+    },
+    { timeout: 30000 },
+  );
   return data;
 }

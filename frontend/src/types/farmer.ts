@@ -5,6 +5,8 @@ export interface FarmerProfile {
   location_name: string;
   latitude: number;
   longitude: number;
+  crops_grown?: string[];
+  preferred_language?: string;
   created_at?: string;
 }
 
@@ -110,4 +112,47 @@ export interface TerrainReport {
   analyzed_from: string;
   analyzed_to: string;
   date_range: string;
+}
+
+export interface ConstraintWeights {
+  water_availability: number;
+  budget: number;
+  market_demand: number;
+}
+
+export interface AlertItem {
+  alert_title: string;
+  alert_message: string;
+  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+export interface StrategyDetail {
+  strategy_name: string;
+  recommended_crop_sequence: string[];
+  suitability_score: number;
+  water_efficiency_score: number;
+  soil_health_impact_pct: number;
+  market_viability_score: number;
+  market_demand_status: 'High' | 'Moderate' | 'Crashing';
+  agronomic_reasoning: string;
+}
+
+export interface Module3StrategyData {
+  realtime_alerts: AlertItem[];
+  baseline: StrategyDetail;
+  resilience_build: StrategyDetail;
+  water_saver: StrategyDetail;
+}
+
+export interface Module3StrategyResponse {
+  status: 'processing' | 'completed' | 'failed';
+  used_fallback: boolean;
+  model_used: string;
+  constraint_weights: ConstraintWeights;
+  preferred_language: string;
+  preferred_language_code: string;
+  location_name: string;
+  coordinates: { lat: number; lon: number };
+  updated_at: string | null;
+  data: Module3StrategyData;
 }

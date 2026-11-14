@@ -690,6 +690,12 @@ export default function AuthPage() {
                   </label>
                 </section>
 
+                {error && (
+                  <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-400" role="alert">
+                    {error}
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={isBusy}

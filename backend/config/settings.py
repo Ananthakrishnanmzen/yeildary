@@ -6,6 +6,31 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def _load_dotenv(env_path: Path) -> None:
+    if not env_path.is_file():
+        return
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(env_path)
+        return
+    except ImportError:
+        pass
+    for raw_line in env_path.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
+
+
+_load_dotenv(BASE_DIR / '.env')
+
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
     'django-insecure-yieldary-dev-secret-key-change-in-production',
@@ -31,6 +56,7 @@ INSTALLED_APPS = [
     'accounts.apps.AccountsConfig',
     'telemetry.apps.TelemetryConfig',
     'terrain.apps.TerrainConfig',
+    'rotation.apps.RotationConfig',
     'Farmer.apps.FarmerConfig',
 ]
 
@@ -171,6 +197,18 @@ FIREBASE_CONFIG = {
 }
 
 DEFAULT_FROM_EMAIL = 'Yieldary AI <no-reply@yieldary.ai>'
+
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+]
+
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://127.0.0.1:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
 
 # CORS / CSRF (for Vite frontend)
 # (CORS_ALLOW_CREDENTIALS already set above)
