@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import traceback
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -19,10 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def _serialize_report(report: RotationStrategyReport) -> dict:
+    meta = (report.structured_telemetry_payload or {}).get('_meta') or {}
     return {
         'status': report.status,
-        'used_fallback': report.used_fallback,
-        'model_used': report.model_used,
+        'used_fallback': bool(meta.get('used_fallback', False)),
+        'model_used': meta.get('model_used', ''),
         'constraint_weights': report.constraint_weights or default_constraint_weights(),
         'preferred_language': (
             report.profile.get_preferred_language_display()
@@ -71,45 +73,79 @@ def _emergency_fallback_response(profile, weights=None) -> dict:
     }
 
 
+def _has_stale_placeholder(report: RotationStrategyReport, profile) -> bool:
+    blob = f'{report.ai_alerts or ""} {report.strategies_matrix or ""}'
+    stale_tokens = (
+        'Regional Staple',
+        'set GEMINI_API_KEY',
+        'Fallback advisory active',
+        'Current Field Crop',
+    )
+    if any(tok in blob for tok in stale_tokens):
+        return True
+    payload_lang = (
+        ((report.structured_telemetry_payload or {}).get('farmer_context') or {}).get('preferred_language')
+    )
+    profile_lang = profile.get_preferred_language_display() or profile.preferred_language or 'English'
+    return bool(payload_lang and payload_lang != profile_lang)
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def module3_strategy_view(request):
-    profile = getattr(request.user, 'farmer_profile', None)
-    if profile is None:
-        return Response({'detail': 'Farmer profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        profile = getattr(request.user, 'farmer_profile', None)
+        if profile is None:
+            return Response({'detail': 'Farmer profile not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    force_refresh = request.query_params.get('refresh') == '1'
-    report = RotationStrategyReport.objects.filter(profile=profile).first()
+        force_refresh = request.query_params.get('refresh') == '1'
+        requested_lang = (
+            request.query_params.get('preferred_language')
+            or request.query_params.get('language')
+        )
+        report = RotationStrategyReport.objects.filter(profile=profile).first()
 
-    if report is None or force_refresh or not report.strategies_matrix:
-        try:
-            report = run_rotation_pipeline_for_profile(
-                profile,
-                skip_gee_history=False if force_refresh else True,
-            )
-        except Exception as exc:
-            logger.exception('Module 3 strategy endpoint caught error for profile %s: %s', profile.pk, exc)
+        if (
+            report is not None
+            and report.status == RotationStrategyReport.Status.COMPLETED
+            and report.strategies_matrix
+            and not force_refresh
+            and not requested_lang
+            and not _has_stale_placeholder(report, profile)
+        ):
+            return Response(_serialize_report(report), status=status.HTTP_200_OK)
+
+        report = run_rotation_pipeline_for_profile(
+            profile,
+            preferred_language=requested_lang,
+            skip_gee_history=False if force_refresh else True,
+        )
+        return Response(_serialize_report(report), status=status.HTTP_200_OK)
+    except Exception as exc:
+        traceback.print_exc()
+        logger.exception('Module 3 strategy endpoint caught error: %s', exc)
+        profile = getattr(request.user, 'farmer_profile', None)
+        if profile is not None:
             return Response(_emergency_fallback_response(profile), status=status.HTTP_200_OK)
-
-    return Response(_serialize_report(report), status=status.HTTP_200_OK)
+        return Response({'status': 'completed', 'used_fallback': True, 'data': _fallback_decision_matrix({})}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def module3_recalculate_view(request):
-    profile = getattr(request.user, 'farmer_profile', None)
-    if profile is None:
-        return Response({'detail': 'Farmer profile not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-    body = request.data if isinstance(request.data, dict) else {}
-    weights = {
-        'water_availability': body.get('water_availability', 50),
-        'budget': body.get('budget', 50),
-        'market_demand': body.get('market_demand', 50),
-    }
-    preferred_language = body.get('preferred_language')
-
     try:
+        profile = getattr(request.user, 'farmer_profile', None)
+        if profile is None:
+            return Response({'detail': 'Farmer profile not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        body = request.data if isinstance(request.data, dict) else {}
+        weights = {
+            'water_availability': body.get('water_availability', 50),
+            'budget': body.get('budget', 50),
+            'market_demand': body.get('market_demand', 50),
+        }
+        preferred_language = body.get('preferred_language') or body.get('language')
+
         # Never re-run slow GEE historical pipelines inside synchronous recalculate.
         report = run_rotation_pipeline_for_profile(
             profile,
@@ -119,5 +155,9 @@ def module3_recalculate_view(request):
         )
         return Response(_serialize_report(report), status=status.HTTP_200_OK)
     except Exception as exc:
-        logger.exception('Module 3 recalculate caught error for profile %s: %s', profile.pk, exc)
-        return Response(_emergency_fallback_response(profile, weights), status=status.HTTP_200_OK)
+        traceback.print_exc()
+        logger.exception('Module 3 recalculate caught error: %s', exc)
+        profile = getattr(request.user, 'farmer_profile', None)
+        if profile is not None:
+            return Response(_emergency_fallback_response(profile), status=status.HTTP_200_OK)
+        return Response({'status': 'completed', 'used_fallback': True, 'data': _fallback_decision_matrix({})}, status=status.HTTP_200_OK)

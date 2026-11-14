@@ -33,9 +33,8 @@ class RotationStrategyReport(models.Model):
     structured_telemetry_payload = models.JSONField(default=dict, blank=True)
     ai_alerts = models.JSONField(default=list, blank=True)
     strategies_matrix = models.JSONField(default=dict, blank=True)
-    used_fallback = models.BooleanField(default=False)
-    model_used = models.CharField(max_length=64, blank=True, default='')
     error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

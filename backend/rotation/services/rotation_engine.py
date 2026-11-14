@@ -139,6 +139,17 @@ def evaluate_market_context(lat: float, lon: float, current_crops: list[str]) ->
     }
 
 
+def _first_non_null(series: list[dict], keys: tuple[str, ...]):
+    for row in reversed(series):
+        if not isinstance(row, dict):
+            continue
+        for key in keys:
+            val = row.get(key)
+            if val is not None:
+                return val
+    return None
+
+
 def _extract_mod1_metrics(telemetry_obj: FieldTelemetry | None) -> dict[str, Any]:
     if not telemetry_obj:
         return {}
@@ -146,18 +157,46 @@ def _extract_mod1_metrics(telemetry_obj: FieldTelemetry | None) -> dict[str, Any
     layer = telemetry_obj.vulnerability_stress_layer or raw.get('vulnerability_stress_layer') or {}
     water = layer.get('water_stress') or {}
     series = water.get('series') or []
-    latest = series[-1] if series else {}
     summary = telemetry_obj.summary_metrics or raw.get('summary_metrics') or {}
+    baseline_stats = water.get('baseline_stats') or {}
+
+    smap_moisture = (
+        _first_non_null(
+            series,
+            (
+                'effective_sm_m3m3',
+                'sm_rootzone_m3m3',
+                'sm_surface_m3m3',
+                'soil_moisture_m3m3',
+                'soil_moisture_m3_m3',
+                'soil_moisture',
+                'smap_moisture',
+            ),
+        )
+        or summary.get('soil_moisture_m3_m3')
+        or summary.get('soil_moisture_m3m3')
+        or baseline_stats.get('mean_soil_moisture_m3m3')
+    )
+    rainfall_mm = (
+        _first_non_null(series, ('rainfall_mm', 'gpm_rainfall_mm'))
+        or summary.get('rainfall_mm')
+    )
+    et_mm = (
+        _first_non_null(series, ('et_mm', 'ecostress_et_mm'))
+        or summary.get('et_mm')
+        or baseline_stats.get('mean_monthly_et_mm')
+    )
+    water_stress = (
+        _first_non_null(series, ('water_stress_index',))
+        or water.get('latest_water_stress_index')
+        or summary.get('water_stress_index')
+    )
 
     return {
-        'smap_moisture': latest.get('soil_moisture_m3_m3') or summary.get('soil_moisture_m3_m3'),
-        'rainfall_mm': latest.get('rainfall_mm') or summary.get('rainfall_mm'),
-        'et_mm': latest.get('et_mm') or summary.get('et_mm'),
-        'water_stress': (
-            latest.get('water_stress_index')
-            or water.get('latest_water_stress_index')
-            or summary.get('water_stress_index')
-        ),
+        'smap_moisture': smap_moisture,
+        'rainfall_mm': rainfall_mm,
+        'et_mm': et_mm,
+        'water_stress': water_stress,
     }
 
 
@@ -289,15 +328,16 @@ def run_rotation_pipeline_for_profile(
 
     report.status = RotationStrategyReport.Status.COMPLETED
     report.constraint_weights = normalized_weights
-    report.structured_telemetry_payload = payload
+    report.structured_telemetry_payload = {
+        **payload,
+        '_meta': {'used_fallback': used_fallback, 'model_used': model_used},
+    }
     report.ai_alerts = ai_output.get('realtime_alerts', [])
     report.strategies_matrix = {
         'baseline': ai_output.get('baseline', {}),
         'resilience_build': ai_output.get('resilience_build', {}),
         'water_saver': ai_output.get('water_saver', {}),
     }
-    report.used_fallback = used_fallback
-    report.model_used = model_used
     report.error_message = ''
     report.save()
     return report

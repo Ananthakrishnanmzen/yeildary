@@ -49,13 +49,44 @@ function buildLocalFallback(
   weights: ConstraintWeights,
 ): Module3StrategyData {
   const water = telemetry?.vulnerability_stress_layer?.water_stress;
-  const latest = water?.series?.length ? water.series[water.series.length - 1] : null;
-  const smap = latest?.soil_moisture_m3m3;
-  const stress = latest?.water_stress_index ?? 35;
+  const series = water?.series ?? [];
+  let smap: number | undefined;
+  let stressVal: number | undefined;
+  for (let i = series.length - 1; i >= 0; i -= 1) {
+    const row = series[i] as unknown as Record<string, unknown>;
+    if (smap == null) {
+      const candidate =
+        row.effective_sm_m3m3 ??
+        row.sm_rootzone_m3m3 ??
+        row.sm_surface_m3m3 ??
+        row.soil_moisture_m3m3 ??
+        row.soil_moisture_m3_m3;
+      if (typeof candidate === 'number') smap = candidate;
+    }
+    if (stressVal == null && typeof row.water_stress_index === 'number') {
+      stressVal = row.water_stress_index;
+    }
+    if (smap != null && stressVal != null) break;
+  }
+  if (smap == null && typeof water?.baseline_stats?.mean_soil_moisture_m3m3 === 'number') {
+    smap = water.baseline_stats.mean_soil_moisture_m3m3;
+  }
+  const stress = stressVal ?? 35;
   const erosion = terrain?.erosion_risk_score ?? 30;
   const slope = terrain?.raw_slope_degrees ?? 4;
   const soil = terrain?.soil_type || 'local soil';
-  const baselineCrops = profile.crops_grown?.length ? profile.crops_grown.slice(0, 3) : ['Current Crop'];
+  const isHumidSloped = (terrain?.raw_rainfall_mm ?? 0) > 150 || slope > 12;
+  const baselineCrops = profile.crops_grown?.length
+    ? profile.crops_grown.slice(0, 3)
+    : isHumidSloped
+    ? ['Black Pepper', 'Cardamom']
+    : ['Rice (Paddy)', 'Maize'];
+  const resilienceCrops = isHumidSloped
+    ? ['Black Pepper', 'Cowpea (Legume Cover)', 'Vetiver Grass (Slope Stabilizer)']
+    : ['Green Gram (Moong)', 'Sunn Hemp Cover', 'Maize'];
+  const waterSaverCrops = isHumidSloped
+    ? ['Ginger (Mulched)', 'Turmeric', 'Dwarf Banana']
+    : ['Pearl Millet (Bajra)', 'Chickpea', 'Sesame'];
 
   return {
     realtime_alerts: [
@@ -77,17 +108,17 @@ function buildLocalFallback(
     },
     resilience_build: {
       strategy_name: 'Soil Resilience & Cover Rotation',
-      recommended_crop_sequence: [baselineCrops[0], 'Nitrogen-Fixing Legume Cover', 'Deep-Rooted Mulch Crop'],
+      recommended_crop_sequence: resilienceCrops,
       suitability_score: Math.max(45, Math.min(96, Math.round(76 + (weights.budget - 50) * 0.12 - erosion * 0.08))),
       water_efficiency_score: Math.max(40, Math.min(95, Math.round(74 + (100 - stress) * 0.12))),
       soil_health_impact_pct: Math.max(10, Math.min(85, Math.round(32 + Math.min(25, erosion * 0.25)))),
       market_viability_score: Math.max(35, Math.min(95, Math.round(62 + weights.market_demand * 0.24))),
       market_demand_status: weights.market_demand >= 65 ? 'High' : 'Moderate',
-      agronomic_reasoning: `Pairs ${baselineCrops[0]} with nitrogen-fixing cover to stabilize ${soil} and reduce RUSLE erosion risk.`,
+      agronomic_reasoning: `Pairs ${resilienceCrops.join(', ')} to stabilize ${soil} and reduce RUSLE erosion risk.`,
     },
     water_saver: {
       strategy_name: 'Low-ET Water-Saver Rotation',
-      recommended_crop_sequence: ['Low-ET Drought-Tolerant Pulse', baselineCrops[0], 'Short-Cycle Oilseed'],
+      recommended_crop_sequence: waterSaverCrops,
       suitability_score: Math.max(45, Math.min(95, Math.round(74 + (100 - weights.water_availability) * 0.15))),
       water_efficiency_score: Math.max(55, Math.min(98, Math.round(84 + (100 - weights.water_availability) * 0.1))),
       soil_health_impact_pct: 22,
