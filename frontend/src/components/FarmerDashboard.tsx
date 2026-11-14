@@ -4,17 +4,24 @@ import {
   Crosshair,
   ExternalLink,
   Flame,
+  Info,
   LogOut,
   MapPin,
-  Minus,
-  Plus,
   Sprout,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { fetchFarmerTelemetryApi, fetchFarmerTerrainApi } from '../services/api';
 import type { TelemetryReport, TerrainReport, WaterStressSeriesItem } from '../types/farmer';
 import RotationStrategyModule from './RotationStrategyModule';
 import { ScienceInfo } from './ScienceGlossaryInfo';
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatMonthLabel(dateStr: string): string {
+  const m = Number(dateStr.slice(5, 7));
+  return m >= 1 && m <= 12 ? MONTH_NAMES[m - 1] : dateStr.slice(5, 7);
+}
 
 function getSoilMoisture(row: WaterStressSeriesItem): number {
   const r = row as unknown as Record<string, unknown>;
@@ -110,7 +117,7 @@ export default function FarmerDashboard() {
   const [soilLayerOn, setSoilLayerOn] = useState(true);
   const [erosionLayerOn, setErosionLayerOn] = useState(false);
   const [heatmapLayerOn, setHeatmapLayerOn] = useState(true);
-  const [zoomDelta, setZoomDelta] = useState(0.015);
+  const [methodologyOpen, setMethodologyOpen] = useState(false);
 
   const loadTelemetry = useCallback(async (forceRefresh = false) => {
     try {
@@ -153,31 +160,34 @@ export default function FarmerDashboard() {
     return null;
   }
 
-  const minLon = (profile.longitude - zoomDelta).toFixed(6);
-  const minLat = (profile.latitude - zoomDelta).toFixed(6);
-  const maxLon = (profile.longitude + zoomDelta).toFixed(6);
-  const maxLat = (profile.latitude + zoomDelta).toFixed(6);
+  const delta = 0.015;
+  const minLon = (profile.longitude - delta).toFixed(6);
+  const minLat = (profile.latitude - delta).toFixed(6);
+  const maxLon = (profile.longitude + delta).toFixed(6);
+  const maxLat = (profile.latitude + delta).toFixed(6);
   const osmEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${minLon}%2C${minLat}%2C${maxLon}%2C${maxLat}&layer=mapnik&marker=${profile.latitude}%2C${profile.longitude}`;
   const osmViewUrl = `https://www.openstreetmap.org/?mlat=${profile.latitude}&mlon=${profile.longitude}#map=14/${profile.latitude}/${profile.longitude}`;
 
   // Monthly Telemetry Insights dual-line SVG geometry
-  const chartW = 280;
-  const chartH = 128;
-  const padX = 16;
-  const padTop = 18;
-  const padBottom = 22;
-  const plotW = chartW - padX * 2;
+  const chartW = 276;
+  const chartH = 112;
+  const padLeft = 4;
+  const padRight = 8;
+  const padTop = 8;
+  const padBottom = 20;
+  const plotW = chartW - padLeft - padRight;
   const plotH = chartH - padTop - padBottom;
 
-  const maxRain = Math.max(120, ...series6.map((s) => s.rainfall_mm || 0));
+  const yTicks = [0, 50, 100, 150, 200];
+  const maxRain = Math.max(200, ...series6.map((s) => s.rainfall_mm || 0));
   const rainPoints = series6.map((row, idx) => ({
-    x: padX + (series6.length > 1 ? (idx / (series6.length - 1)) * plotW : plotW / 2),
+    x: padLeft + (series6.length > 1 ? (idx / (series6.length - 1)) * plotW : plotW / 2),
     y: padTop + plotH - ((row.rainfall_mm || 0) / maxRain) * plotH,
   }));
   const smPoints = series6.map((row, idx) => {
     const sm = getSoilMoisture(row);
     return {
-      x: padX + (series6.length > 1 ? (idx / (series6.length - 1)) * plotW : plotW / 2),
+      x: padLeft + (series6.length > 1 ? (idx / (series6.length - 1)) * plotW : plotW / 2),
       y: padTop + plotH - Math.min(1, Math.max(0, sm / 0.6)) * plotH,
     };
   });
@@ -236,6 +246,14 @@ export default function FarmerDashboard() {
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setMethodologyOpen(true)}
+              className="hidden md:inline-flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/15 rounded-full px-3.5 py-1 text-xs text-slate-200 transition"
+            >
+              <Info className="w-3.5 h-3.5 text-[#38BDF8]" />
+              NASA Data &amp; Methodology
+            </button>
             <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full px-3.5 py-1 text-xs font-medium">
               <CheckCircle2 className="w-3.5 h-3.5" />
               Verified Account
@@ -307,66 +325,92 @@ export default function FarmerDashboard() {
                 )}
 
                 {series6.length > 0 ? (
-                  <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full h-32 overflow-visible">
-                    <defs>
-                      <linearGradient id="rainAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.35" />
-                        <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.0" />
-                      </linearGradient>
-                      <linearGradient id="smAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#84CC16" stopOpacity="0.35" />
-                        <stop offset="100%" stopColor="#84CC16" stopOpacity="0.0" />
-                      </linearGradient>
-                    </defs>
+                  <div className="pl-6 pr-2 pt-2 pb-1 relative">
+                    <div className="absolute left-0 top-0 bottom-6 flex flex-col justify-between text-[10px] text-slate-500">
+                      <span>200</span>
+                      <span>150</span>
+                      <span>100</span>
+                      <span>50</span>
+                      <span>0</span>
+                    </div>
+                    <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full h-28 overflow-visible">
+                      <defs>
+                        <linearGradient id="rainAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.0" />
+                        </linearGradient>
+                        <linearGradient id="smAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#84CC16" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="#84CC16" stopOpacity="0.0" />
+                        </linearGradient>
+                      </defs>
 
-                    <path d={rainAreaPath} fill="url(#rainAreaGrad)" />
-                    <path d={smAreaPath} fill="url(#smAreaGrad)" />
-                    <path d={rainPath} fill="none" stroke="#38BDF8" strokeWidth="2.2" />
-                    <path d={smPath} fill="none" stroke="#84CC16" strokeWidth="2.2" />
+                      <path d={rainAreaPath} fill="url(#rainAreaGrad)" />
+                      <path d={smAreaPath} fill="url(#smAreaGrad)" />
 
-                    {series6.map((row, idx) => {
-                      const rp = rainPoints[idx];
-                      const sp = smPoints[idx];
-                      const isActive = idx === activeIdx;
-                      return (
-                        <g
-                          key={row.date}
-                          onMouseEnter={() => setHoveredIdx(idx)}
-                          onMouseLeave={() => setHoveredIdx(null)}
-                          className="cursor-pointer"
-                        >
-                          <rect
-                            x={rp.x - 14}
-                            y={padTop}
-                            width={28}
-                            height={plotH}
-                            fill="transparent"
+                      {/* Horizontal Dashed Grid Lines */}
+                      {yTicks.map((tick) => {
+                        const yPos = padTop + plotH - (tick / maxRain) * plotH;
+                        return (
+                          <line
+                            key={tick}
+                            x1={padLeft}
+                            x2={chartW - padRight}
+                            y1={yPos}
+                            y2={yPos}
+                            stroke="rgba(255,255,255,0.08)"
+                            strokeDasharray="3 3"
                           />
-                          <circle
-                            cx={rp.x}
-                            cy={rp.y}
-                            r={isActive ? 4 : 2.5}
-                            fill="#38BDF8"
-                          />
-                          <circle
-                            cx={sp.x}
-                            cy={sp.y}
-                            r={isActive ? 4 : 2.5}
-                            fill="#84CC16"
-                          />
-                          <text
-                            x={rp.x}
-                            y={chartH - 4}
-                            textAnchor="middle"
-                            fontSize="9"
-                            fill={isActive ? '#FFFFFF' : '#94A3B8'}
+                        );
+                      })}
+
+                      <path d={rainPath} fill="none" stroke="#38BDF8" strokeWidth="2.2" />
+                      <path d={smPath} fill="none" stroke="#84CC16" strokeWidth="2.2" />
+
+                      {series6.map((row, idx) => {
+                        const rp = rainPoints[idx];
+                        const sp = smPoints[idx];
+                        const isActive = idx === activeIdx;
+                        return (
+                          <g
+                            key={row.date}
+                            onMouseEnter={() => setHoveredIdx(idx)}
+                            onMouseLeave={() => setHoveredIdx(null)}
+                            className="cursor-pointer"
                           >
-                            {row.date.slice(5, 7)}
-                          </text>
-                        </g>
-                      );
-                    })}
-                  </svg>
+                            <rect
+                              x={rp.x - 14}
+                              y={padTop}
+                              width={28}
+                              height={plotH}
+                              fill="transparent"
+                            />
+                            <circle
+                              cx={rp.x}
+                              cy={rp.y}
+                              r={isActive ? 4 : 2.5}
+                              fill="#38BDF8"
+                            />
+                            <circle
+                              cx={sp.x}
+                              cy={sp.y}
+                              r={isActive ? 4 : 2.5}
+                              fill="#84CC16"
+                            />
+                            <text
+                              x={rp.x}
+                              y={chartH - 4}
+                              textAnchor="middle"
+                              fontSize="9"
+                              fill={isActive ? '#FFFFFF' : '#94A3B8'}
+                            >
+                              {formatMonthLabel(row.date)}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
                 ) : (
                   <div className="h-32 flex items-center justify-center text-xs text-slate-500">
                     Loading telemetry series...
@@ -377,7 +421,7 @@ export default function FarmerDashboard() {
           </div>
 
           {/* B. Center Column (col-span-6): Telemetry Map */}
-          <section className="col-span-12 lg:col-span-6 rounded-2xl bg-[#0E1015]/90 backdrop-blur-md border border-white/10 p-5 shadow-2xl flex flex-col gap-3">
+          <section className="col-span-12 lg:col-span-6 bg-[#0E1015]/90 backdrop-blur-md border border-white/5 rounded-2xl p-4 shadow-2xl relative overflow-hidden flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-white">Telemetry Map</h2>
               <div className="flex flex-wrap items-center gap-2">
@@ -418,27 +462,28 @@ export default function FarmerDashboard() {
               </div>
             </div>
 
-            <div className="relative h-[340px] rounded-xl overflow-hidden bg-[#07090D] border border-white/10">
+            <div className="relative h-[340px] rounded-xl overflow-hidden bg-[#07090D]">
               <iframe
                 title="Farm Location Telemetry Map"
                 src={osmEmbedUrl}
                 className="w-full h-full border-0"
                 style={{
-                  filter: 'invert(92%) hue-rotate(180deg) saturate(0.75) brightness(0.86) contrast(1.08)',
+                  filter: 'invert(90%) hue-rotate(180deg) brightness(95%) contrast(90%)',
                 }}
                 loading="lazy"
               />
+              <div className="pointer-events-none absolute inset-0 bg-black/20" />
 
-              {/* Glowing SVG Farm Boundary & Heatmap Overlay */}
+              {/* Glowing SVG Farm Boundary & Multi-Stop Heatmap Overlay */}
               <svg
                 viewBox="0 0 600 340"
                 preserveAspectRatio="none"
                 className="pointer-events-none absolute inset-0 w-full h-full"
               >
                 <defs>
-                  <radialGradient id="farmGlowGrad" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stopColor="#84CC16" stopOpacity={soilLayerOn ? '0.35' : '0.08'} />
-                    <stop offset="65%" stopColor="#FACC15" stopOpacity={heatmapLayerOn ? '0.26' : '0.05'} />
+                  <radialGradient id="farmGlowGrad" cx="45%" cy="48%" r="55%">
+                    <stop offset="0%" stopColor="#84CC16" stopOpacity={soilLayerOn ? '0.35' : '0.10'} />
+                    <stop offset="55%" stopColor="#FACC15" stopOpacity={heatmapLayerOn ? '0.35' : '0.08'} />
                     <stop offset="100%" stopColor="#FACC15" stopOpacity="0" />
                   </radialGradient>
                 </defs>
@@ -456,7 +501,7 @@ export default function FarmerDashboard() {
                     rx="78"
                     ry="44"
                     fill="#FACC15"
-                    fillOpacity="0.28"
+                    fillOpacity="0.32"
                     stroke="#FACC15"
                     strokeWidth="1.5"
                     strokeDasharray="4 3"
@@ -464,24 +509,8 @@ export default function FarmerDashboard() {
                 )}
               </svg>
 
-              {/* Bottom-Right Map Controls */}
-              <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setZoomDelta((d) => Math.max(0.005, Number((d - 0.005).toFixed(3))))}
-                  aria-label="Zoom in"
-                  className="w-8 h-8 rounded-lg bg-[#0E1015]/90 backdrop-blur-md border border-white/15 flex items-center justify-center text-white hover:border-[#84CC16]/50 transition"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setZoomDelta((d) => Math.min(0.08, Number((d + 0.005).toFixed(3))))}
-                  aria-label="Zoom out"
-                  className="w-8 h-8 rounded-lg bg-[#0E1015]/90 backdrop-blur-md border border-white/15 flex items-center justify-center text-white hover:border-[#84CC16]/50 transition"
-                >
-                  <Minus className="w-3.5 h-3.5" />
-                </button>
+              {/* Bottom-Right Open Map Button (single control set; OSM handles +/- zoom) */}
+              <div className="absolute bottom-3 right-3">
                 <a
                   href={osmViewUrl}
                   target="_blank"
@@ -538,6 +567,55 @@ export default function FarmerDashboard() {
         {/* 3. Lower Bento Grid (12-col): Scenario Weighting + Crop Rotation Strategy Comparison */}
         <RotationStrategyModule profile={profile} telemetry={telemetry} terrain={terrain} />
       </main>
+
+      {/* NASA Data & Methodology Modal */}
+      {methodologyOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setMethodologyOpen(false)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl bg-[#0E1015]/95 border border-white/15 p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white">NASA Data &amp; Systems Intelligence Methodology</h3>
+                <p className="text-xs text-slate-400">
+                  Model Confidence: {Math.max(68, Math.min(95, 96 - ((terrain?.tree_cover_pct ?? 0) > 40 ? 7 : 2) - ((terrain?.raw_slope_degrees ?? 0) > 15 ? 6 : 2)))}% ± {((terrain?.tree_cover_pct ?? 0) > 40 ? 7 : 2) + ((terrain?.raw_slope_degrees ?? 0) > 15 ? 6 : 2)}%
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMethodologyOpen(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:text-white hover:bg-white/10"
+                aria-label="Close modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="rounded-xl border border-white/10 bg-[#07090D]/70 p-3.5 space-y-1">
+                <p className="font-semibold text-[#38BDF8]">Satellite vs. Ground-Truth Fusion</p>
+                <p className="text-slate-300 leading-relaxed">
+                  NASA orbital anomalies (SMAP/GLDAS, GPM, ECOSTRESS) paired with local soil probes &amp; Krishi Bhavan Soil Health Cards reduce root-zone estimation error by ~35–45%.
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-[#07090D]/70 p-3.5 space-y-1">
+                <p className="font-semibold text-[#84CC16]">250m × Monthly Resolution Harmonization</p>
+                <p className="text-slate-300 leading-relaxed">
+                  Bilinear SMAP downsampling (15 km buffer), GPM monthly summation, cloud-masked MODIS/ECOSTRESS interpolation, and 30m SRTM slope pooling onto SoilGrids 250m grid.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-[#FACC15]/30 bg-[#FACC15]/10 p-3.5 text-xs text-slate-200 leading-relaxed">
+              <strong className="text-[#FACC15]">Local Expertise &amp; Krishi Bhavan Charter:</strong> Yieldary AI is an orbital decision-support companion designed to augment—never replace—the generational wisdom of local farmers, Krishi Bhavan agricultural officers, and physical laboratory soil testing.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

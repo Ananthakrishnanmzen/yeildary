@@ -13,6 +13,7 @@ import {
   recalculateModule3StrategyApi,
 } from '../services/api';
 import type {
+  ClimateScenario,
   ConstraintWeights,
   FarmerProfile,
   Module3StrategyData,
@@ -153,6 +154,11 @@ export default function RotationStrategyModule({
     market_demand: 50,
     equipment_access: 50,
   });
+  const [climate, setClimate] = useState<ClimateScenario>({
+    rainfall_delta_pct: 0,
+    temp_delta_c: 0,
+  });
+  const [weightTab, setWeightTab] = useState<'priorities' | 'climate'>('priorities');
   const [selectedLanguage, setSelectedLanguage] = useState<string>(
     profile.preferred_language || 'en',
   );
@@ -165,6 +171,9 @@ export default function RotationStrategyModule({
       setReport(res);
       if (res.constraint_weights) {
         setWeights({ equipment_access: 50, ...res.constraint_weights });
+      }
+      if (res.climate_scenario) {
+        setClimate(res.climate_scenario);
       }
       if (res.preferred_language_code) {
         setSelectedLanguage(res.preferred_language_code);
@@ -181,10 +190,10 @@ export default function RotationStrategyModule({
   }, [loadStrategy]);
 
   const triggerRecalculate = useCallback(
-    async (nextWeights: ConstraintWeights, lang: string) => {
+    async (nextWeights: ConstraintWeights, lang: string, nextClimate: ClimateScenario) => {
       setRecalculating(true);
       try {
-        const res = await recalculateModule3StrategyApi(nextWeights, lang);
+        const res = await recalculateModule3StrategyApi(nextWeights, lang, nextClimate);
         setReport(res);
       } catch {
         // Keep responsive client fallback
@@ -195,15 +204,28 @@ export default function RotationStrategyModule({
     [],
   );
 
-  const handleSliderChange = (key: 'water_availability' | 'budget' | 'market_demand', val: number) => {
-    const updated = { ...weights, [key]: val };
-    setWeights(updated);
+  const scheduleRecalculate = (nextWeights: ConstraintWeights, nextClimate: ClimateScenario) => {
     if (debounceRef.current) {
       window.clearTimeout(debounceRef.current);
     }
     debounceRef.current = window.setTimeout(() => {
-      triggerRecalculate(updated, selectedLanguage);
+      triggerRecalculate(nextWeights, selectedLanguage, nextClimate);
     }, 400);
+  };
+
+  const handleSliderChange = (
+    key: 'water_availability' | 'budget' | 'market_demand' | 'equipment_access',
+    val: number,
+  ) => {
+    const updated = { ...weights, [key]: val };
+    setWeights(updated);
+    scheduleRecalculate(updated, climate);
+  };
+
+  const handleClimateChange = (key: 'rainfall_delta_pct' | 'temp_delta_c', val: number) => {
+    const updated = { ...climate, [key]: val };
+    setClimate(updated);
+    scheduleRecalculate(weights, updated);
   };
 
   useEffect(() => {
@@ -270,57 +292,140 @@ export default function RotationStrategyModule({
     <div className="grid grid-cols-12 gap-4">
       {/* A. Bottom-Left Card: Scenario & Climate Weighting (col-span-3) */}
       <section className="col-span-12 lg:col-span-3 rounded-2xl bg-[#0E1015]/90 backdrop-blur-md border border-white/10 p-5 shadow-2xl flex flex-col justify-between gap-4">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-white">Scenario &amp; Climate Weighting</h2>
-          <button
-            type="button"
-            onClick={() => triggerRecalculate(weights, selectedLanguage)}
-            disabled={recalculating}
-            aria-label="Recalculate strategies"
-            className="rounded-lg p-1.5 text-slate-400 hover:text-[#84CC16] hover:bg-white/5 transition disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${recalculating ? 'animate-spin text-[#84CC16]' : ''}`} />
-          </button>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold text-white">Scenario &amp; Climate Weighting</h2>
+            <button
+              type="button"
+              onClick={() => triggerRecalculate(weights, selectedLanguage, climate)}
+              disabled={recalculating}
+              aria-label="Recalculate strategies"
+              className="rounded-lg p-1.5 text-slate-400 hover:text-[#84CC16] hover:bg-white/5 transition disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${recalculating ? 'animate-spin text-[#84CC16]' : ''}`} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-[#07090D] p-1 border border-white/10">
+            <button
+              type="button"
+              onClick={() => setWeightTab('priorities')}
+              className={`rounded-lg py-1 text-[11px] font-medium transition ${
+                weightTab === 'priorities'
+                  ? 'bg-[#84CC16]/20 text-[#84CC16] border border-[#84CC16]/40'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Priorities
+            </button>
+            <button
+              type="button"
+              onClick={() => setWeightTab('climate')}
+              className={`rounded-lg py-1 text-[11px] font-medium transition ${
+                weightTab === 'climate'
+                  ? 'bg-[#38BDF8]/20 text-[#38BDF8] border border-[#38BDF8]/40'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Climate Sim
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4 my-auto">
-          {[
-            {
-              key: 'water_availability' as const,
-              label: 'Water Availability',
-              accent: 'accent-[#38BDF8]',
-              valColor: 'text-[#38BDF8]',
-            },
-            {
-              key: 'budget' as const,
-              label: 'Input Budget',
-              accent: 'accent-[#84CC16]',
-              valColor: 'text-[#84CC16]',
-            },
-            {
-              key: 'market_demand' as const,
-              label: 'Market Demand',
-              accent: 'accent-[#FACC15]',
-              valColor: 'text-[#FACC15]',
-            },
-          ].map((slider) => (
-            <label key={slider.key} className="block space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-300 font-medium">{slider.label}</span>
-                <span className={`font-mono font-bold ${slider.valColor}`}>
-                  {weights[slider.key]}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={weights[slider.key]}
-                onChange={(e) => handleSliderChange(slider.key, Number(e.target.value))}
-                className={`w-full h-1.5 cursor-pointer rounded-lg bg-white/10 ${slider.accent}`}
-              />
-            </label>
-          ))}
+          {weightTab === 'priorities' ? (
+            [
+              {
+                key: 'water_availability' as const,
+                label: 'Water Availability',
+                accent: 'accent-[#38BDF8]',
+                valColor: 'text-[#38BDF8]',
+              },
+              {
+                key: 'budget' as const,
+                label: 'Input Budget',
+                accent: 'accent-[#84CC16]',
+                valColor: 'text-[#84CC16]',
+              },
+              {
+                key: 'market_demand' as const,
+                label: 'Market Demand',
+                accent: 'accent-[#FACC15]',
+                valColor: 'text-[#FACC15]',
+              },
+            ].map((slider) => (
+              <label key={slider.key} className="block space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-medium">{slider.label}</span>
+                  <span className={`font-mono font-bold ${slider.valColor}`}>
+                    {weights[slider.key] ?? 50}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={weights[slider.key] ?? 50}
+                  onChange={(e) => handleSliderChange(slider.key, Number(e.target.value))}
+                  className={`w-full h-1.5 cursor-pointer rounded-lg bg-white/10 ${slider.accent}`}
+                />
+              </label>
+            ))
+          ) : (
+            <>
+              <label className="block space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-medium">Rainfall Anomaly</span>
+                  <span className="font-mono font-bold text-[#38BDF8]">
+                    {climate.rainfall_delta_pct > 0 ? '+' : ''}
+                    {climate.rainfall_delta_pct}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={-30}
+                  max={30}
+                  step={5}
+                  value={climate.rainfall_delta_pct}
+                  onChange={(e) => handleClimateChange('rainfall_delta_pct', Number(e.target.value))}
+                  className="w-full h-1.5 cursor-pointer rounded-lg bg-white/10 accent-[#38BDF8]"
+                />
+              </label>
+              <label className="block space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-medium">Temperature Shift</span>
+                  <span className="font-mono font-bold text-[#FACC15]">
+                    +{climate.temp_delta_c.toFixed(1)}°C
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={3}
+                  step={0.5}
+                  value={climate.temp_delta_c}
+                  onChange={(e) => handleClimateChange('temp_delta_c', Number(e.target.value))}
+                  className="w-full h-1.5 cursor-pointer rounded-lg bg-white/10 accent-[#FACC15]"
+                />
+              </label>
+              <label className="block space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-300 font-medium">Equipment Access</span>
+                  <span className="font-mono font-bold text-[#84CC16]">
+                    {weights.equipment_access ?? 50}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={weights.equipment_access ?? 50}
+                  onChange={(e) => handleSliderChange('equipment_access', Number(e.target.value))}
+                  className="w-full h-1.5 cursor-pointer rounded-lg bg-white/10 accent-[#84CC16]"
+                />
+              </label>
+            </>
+          )}
         </div>
       </section>
 
@@ -340,7 +445,7 @@ export default function RotationStrategyModule({
                 onChange={(e) => {
                   const nextLang = e.target.value;
                   setSelectedLanguage(nextLang);
-                  triggerRecalculate(weights, nextLang);
+                  triggerRecalculate(weights, nextLang, climate);
                 }}
                 className="rounded-lg border border-white/10 bg-[#07090D] px-2.5 py-1 text-xs text-white outline-none cursor-pointer"
               >
@@ -378,8 +483,8 @@ export default function RotationStrategyModule({
                 className="relative py-3 md:py-0 md:px-5 first:pt-0 first:md:pl-0 last:pb-0 last:md:pr-0 flex flex-col justify-between gap-4"
               >
                 <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-bold text-white truncate">{detail.strategy_name}</h3>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-sm font-bold text-white leading-snug">{detail.strategy_name}</h3>
                     <button
                       type="button"
                       onClick={() => setOpenReasoningKey(isReasoningOpen ? null : key)}
