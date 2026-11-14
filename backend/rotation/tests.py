@@ -83,9 +83,23 @@ class Module3RotationTests(TestCase):
 
             recalc = self.client.post(
                 reverse('module3-recalculate'),
-                {'water_availability': 80, 'budget': 40, 'market_demand': 70, 'preferred_language': 'en'},
+                {
+                    'water_availability': 80,
+                    'budget': 40,
+                    'market_demand': 70,
+                    'equipment_access': 30,
+                    'rainfall_delta_pct': -20,
+                    'temp_delta_c': 1.5,
+                    'preferred_language': 'en',
+                },
                 format='json',
             )
             self.assertEqual(recalc.status_code, 200)
             self.assertEqual(recalc.data['constraint_weights']['water_availability'], 80)
+            self.assertEqual(recalc.data['constraint_weights']['equipment_access'], 30)
+            self.assertEqual(recalc.data['climate_scenario']['rainfall_delta_pct'], -20.0)
+            self.assertEqual(recalc.data['climate_scenario']['temp_delta_c'], 1.5)
             self.assertEqual(recalc.data['preferred_language_code'], 'en')
+            self.assertIn('pest_cycle_disruption_score', recalc.data['data']['resilience_build'])
+            self.assertIn('forage_biomass_potential', recalc.data['data']['resilience_build'])
+            self.assertTrue(recalc.data['data']['local_expertise_charter'])

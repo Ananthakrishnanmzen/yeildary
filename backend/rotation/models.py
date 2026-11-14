@@ -8,6 +8,7 @@ def default_constraint_weights() -> dict:
         'water_availability': 50,
         'budget': 50,
         'market_demand': 50,
+        'equipment_access': 50,
     }
 
 

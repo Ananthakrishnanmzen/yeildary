@@ -1,639 +1,541 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Activity,
-  AlertTriangle,
-  CloudRain,
-  Compass,
-  Droplets,
+  CheckCircle2,
+  Crosshair,
   ExternalLink,
   Flame,
-  Layers,
-  Leaf,
-  Loader2,
   LogOut,
-  Mail,
   MapPin,
-  Mountain,
-  RefreshCw,
-  ShieldCheck,
+  Minus,
+  Plus,
   Sprout,
-  Trees,
-  User,
-  Wind,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { fetchFarmerTelemetryApi, fetchFarmerTerrainApi } from '../services/api';
-import type { TelemetryReport, TerrainReport } from '../types/farmer';
+import type { TelemetryReport, TerrainReport, WaterStressSeriesItem } from '../types/farmer';
 import RotationStrategyModule from './RotationStrategyModule';
+import { ScienceInfo } from './ScienceGlossaryInfo';
+
+function getSoilMoisture(row: WaterStressSeriesItem): number {
+  const r = row as unknown as Record<string, unknown>;
+  const val = r.effective_sm_m3m3 ?? r.sm_rootzone_m3m3 ?? r.sm_surface_m3m3 ?? r.soil_moisture_m3m3;
+  return typeof val === 'number' ? val : 0.35;
+}
+
+function buildSmoothPath(points: Array<{ x: number; y: number }>): string {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const cx = ((p0.x + p1.x) / 2).toFixed(1);
+    d += ` C ${cx} ${p0.y.toFixed(1)}, ${cx} ${p1.y.toFixed(1)}, ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+interface RadialGaugeProps {
+  label: string;
+  displayValue: string;
+  percent: number;
+  strokeColor: string;
+  gradientId?: string;
+  termKey: 'water_balance' | 'ndvi' | 'rusle' | 'frost_risk';
+}
+
+function RadialGauge({
+  label,
+  displayValue,
+  percent,
+  strokeColor,
+  gradientId,
+  termKey,
+}: RadialGaugeProps) {
+  const clamped = Math.max(0, Math.min(100, percent));
+  const r = 30;
+  const c = 2 * Math.PI * r;
+  const offset = c - (clamped / 100) * c;
+
+  return (
+    <div className="flex flex-col items-center justify-center rounded-xl bg-[#07090D]/70 border border-white/10 p-3 text-center">
+      <div className="relative w-20 h-20 flex items-center justify-center">
+        <svg className="w-20 h-20 -rotate-90" viewBox="0 0 76 76">
+          {gradientId && (
+            <defs>
+              <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#84CC16" />
+                <stop offset="100%" stopColor="#38BDF8" />
+              </linearGradient>
+            </defs>
+          )}
+          <circle
+            cx="38"
+            cy="38"
+            r={r}
+            fill="none"
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth="6"
+          />
+          <circle
+            cx="38"
+            cy="38"
+            r={r}
+            fill="none"
+            stroke={gradientId ? `url(#${gradientId})` : strokeColor}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={offset}
+            style={{ filter: `drop-shadow(0 0 6px ${strokeColor}66)` }}
+          />
+        </svg>
+        <span className="absolute text-sm font-bold font-mono text-white">{displayValue}</span>
+      </div>
+      <p className="mt-2 text-[11px] font-medium text-slate-300 flex items-center justify-center">
+        <span>{label}</span>
+        <ScienceInfo termKey={termKey} />
+      </p>
+    </div>
+  );
+}
 
 export default function FarmerDashboard() {
   const { profile, refreshProfile, logout } = useAuth();
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [telemetry, setTelemetry] = useState<TelemetryReport | null>(null);
-  const [telemetryLoading, setTelemetryLoading] = useState(true);
-  const [telemetryError, setTelemetryError] = useState<string | null>(null);
-
   const [terrain, setTerrain] = useState<TerrainReport | null>(null);
-  const [terrainLoading, setTerrainLoading] = useState(true);
-  const [terrainError, setTerrainError] = useState<string | null>(null);
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
+  // Map interactive toggles & zoom
+  const [soilLayerOn, setSoilLayerOn] = useState(true);
+  const [erosionLayerOn, setErosionLayerOn] = useState(false);
+  const [heatmapLayerOn, setHeatmapLayerOn] = useState(true);
+  const [zoomDelta, setZoomDelta] = useState(0.015);
 
   const loadTelemetry = useCallback(async (forceRefresh = false) => {
-    setTelemetryLoading(true);
-    setTelemetryError(null);
     try {
       const data = await fetchFarmerTelemetryApi(forceRefresh);
-      console.log('Module 1 Telemetry JSON:', data);
       setTelemetry(data);
-    } catch (err) {
-      setTelemetryError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to calculate Module 1 vulnerability & stress telemetry.',
-      );
-    } finally {
-      setTelemetryLoading(false);
+    } catch {
+      // Non-blocking: gauges fall back cleanly
     }
   }, []);
 
   const loadTerrain = useCallback(async (forceRefresh = false) => {
-    setTerrainLoading(true);
-    setTerrainError(null);
     try {
       const data = await fetchFarmerTerrainApi(forceRefresh);
       setTerrain(data);
-    } catch (err) {
-      setTerrainError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to calculate Module 2 terrain & soil health report.',
-      );
-    } finally {
-      setTerrainLoading(false);
+    } catch {
+      // Non-blocking: gauges fall back cleanly
     }
   }, []);
 
   useEffect(() => {
     let active = true;
-    setIsRefreshing(true);
-    refreshProfile()
-      .catch(() => {
-        // Handled by AuthContext if token expired
-      })
-      .finally(() => {
-        if (active) setIsRefreshing(false);
-      });
-    loadTelemetry(false);
-    loadTerrain(false);
+    const init = async () => {
+      await refreshProfile();
+      if (!active) return;
+      loadTelemetry(false);
+      loadTerrain(false);
+    };
+    init();
     return () => {
       active = false;
     };
   }, [refreshProfile, loadTelemetry, loadTerrain]);
 
+  const series6 = useMemo(() => {
+    const raw = telemetry?.vulnerability_stress_layer?.water_stress?.series ?? [];
+    return raw.slice(-6);
+  }, [telemetry]);
+
   if (!profile) {
     return null;
   }
 
-  const delta = 0.03;
-  const minLon = (profile.longitude - delta).toFixed(6);
-  const minLat = (profile.latitude - delta).toFixed(6);
-  const maxLon = (profile.longitude + delta).toFixed(6);
-  const maxLat = (profile.latitude + delta).toFixed(6);
-
+  const minLon = (profile.longitude - zoomDelta).toFixed(6);
+  const minLat = (profile.latitude - zoomDelta).toFixed(6);
+  const maxLon = (profile.longitude + zoomDelta).toFixed(6);
+  const maxLat = (profile.latitude + zoomDelta).toFixed(6);
   const osmEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${minLon}%2C${minLat}%2C${maxLon}%2C${maxLat}&layer=mapnik&marker=${profile.latitude}%2C${profile.longitude}`;
   const osmViewUrl = `https://www.openstreetmap.org/?mlat=${profile.latitude}&mlon=${profile.longitude}#map=14/${profile.latitude}/${profile.longitude}`;
 
-  const rating = telemetry?.location_rating;
-  const water = telemetry?.vulnerability_stress_layer?.water_stress;
-  const veg = telemetry?.vulnerability_stress_layer?.vegetation_health;
-  const micro = telemetry?.vulnerability_stress_layer?.microclimate;
-  const latestWater = water?.series?.length ? water.series[water.series.length - 1] : null;
-  const recentSeries = water?.series ? water.series.slice(-6).reverse() : [];
-  const pearsonR =
-    veg?.heatwave_ndvi_correlation?.pearson_r_max_temp_vs_ndvi ??
-    veg?.correlation?.pearson_r_max_temp_vs_ndvi;
+  // Monthly Telemetry Insights dual-line SVG geometry
+  const chartW = 280;
+  const chartH = 128;
+  const padX = 16;
+  const padTop = 18;
+  const padBottom = 22;
+  const plotW = chartW - padX * 2;
+  const plotH = chartH - padTop - padBottom;
+
+  const maxRain = Math.max(120, ...series6.map((s) => s.rainfall_mm || 0));
+  const rainPoints = series6.map((row, idx) => ({
+    x: padX + (series6.length > 1 ? (idx / (series6.length - 1)) * plotW : plotW / 2),
+    y: padTop + plotH - ((row.rainfall_mm || 0) / maxRain) * plotH,
+  }));
+  const smPoints = series6.map((row, idx) => {
+    const sm = getSoilMoisture(row);
+    return {
+      x: padX + (series6.length > 1 ? (idx / (series6.length - 1)) * plotW : plotW / 2),
+      y: padTop + plotH - Math.min(1, Math.max(0, sm / 0.6)) * plotH,
+    };
+  });
+
+  const rainPath = buildSmoothPath(rainPoints);
+  const smPath = buildSmoothPath(smPoints);
+  const rainAreaPath = rainPoints.length
+    ? `${rainPath} L ${rainPoints[rainPoints.length - 1].x.toFixed(1)} ${padTop + plotH} L ${rainPoints[0].x.toFixed(1)} ${padTop + plotH} Z`
+    : '';
+  const smAreaPath = smPoints.length
+    ? `${smPath} L ${smPoints[smPoints.length - 1].x.toFixed(1)} ${padTop + plotH} L ${smPoints[0].x.toFixed(1)} ${padTop + plotH} Z`
+    : '';
+
+  const activeIdx =
+    hoveredIdx !== null && series6[hoveredIdx]
+      ? hoveredIdx
+      : series6.length > 0
+      ? series6.length - 1
+      : null;
+  const activeRow = activeIdx !== null ? series6[activeIdx] : null;
+
+  // 4 Telemetry Gauge metrics
+  const waterSecurityPct = telemetry?.location_rating?.water_security_rate ?? 55;
+  const ndviRaw = telemetry?.summary_metrics?.sentinel2?.s2_ndvi;
+  const ndviNum = typeof ndviRaw === 'number' ? ndviRaw : 0.69;
+  const erosionScore = terrain?.erosion_risk_score ?? 90;
+
+  const latestWater = series6.length ? series6[series6.length - 1] : null;
+  const rawMinTemp = (latestWater as unknown as Record<string, unknown> | null)?.min_temp_c;
+  const minTempC =
+    typeof rawMinTemp === 'number'
+      ? rawMinTemp
+      : Math.abs(profile.latitude) < 23.5
+      ? 16.4
+      : Math.abs(profile.latitude) < 40
+      ? 7.5
+      : 2.0;
+  const frostPct = minTempC <= 4 ? 85 : minTempC <= 10 ? 45 : 15;
 
   return (
-    <div className="relative min-h-screen bg-[#07090D] text-slate-100 overflow-hidden">
-      <div className="pointer-events-none absolute -top-40 right-0 w-[28rem] h-[28rem] rounded-full bg-[#84CC16]/8 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 -left-32 w-96 h-96 rounded-full bg-[#38BDF8]/8 blur-3xl" />
-
-      {/* Top Navigation */}
-      <header className="sticky top-0 z-20 bg-[#0E1015]/80 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#84CC16]/15 border border-[#84CC16]/30 flex items-center justify-center text-[#84CC16]">
-              <Sprout className="w-5 h-5" />
+    <div className="min-h-screen bg-[#07090D] text-slate-100 flex flex-col">
+      {/* 1. Top Navigation Bar (h-16) */}
+      <header className="h-16 sticky top-0 z-30 border-b border-white/10 bg-[#07090D]/90 backdrop-blur-md">
+        <div className="max-w-[1440px] mx-auto h-full px-4 sm:px-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-full bg-[#84CC16]/15 border border-[#84CC16]/40 flex items-center justify-center shadow-[0_0_20px_rgba(132,204,22,0.35)] shrink-0">
+              <Sprout className="w-4 h-4 text-[#84CC16]" />
             </div>
-            <div>
-              <span className="font-bold text-base sm:text-lg text-white tracking-tight">
-                Yieldary AI
-              </span>
-              <span className="hidden sm:inline-block ml-2.5 text-xs text-slate-400">
-                Vulnerability &amp; Stress Telemetry
-              </span>
-            </div>
+            <span className="text-xl font-semibold tracking-tight text-white truncate">
+              Yieldary AI
+            </span>
+            <span className="hidden sm:inline-block h-4 w-px bg-white/15" />
+            <span className="hidden sm:inline-block text-xs text-slate-400 truncate">
+              Vulnerability &amp; Stress Telemetry
+            </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-[#84CC16]/10 text-[#84CC16] border border-[#84CC16]/25">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              JWT Authenticated
+          <div className="flex items-center gap-2.5 shrink-0">
+            <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full px-3.5 py-1 text-xs font-medium">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Verified Account
             </span>
-
             <button
               type="button"
               onClick={logout}
-              className="inline-flex items-center gap-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-200 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-4 py-1.5 text-xs text-slate-200 transition"
             >
-              <LogOut className="w-4 h-4 text-[#FACC15]" />
-              <span>Logout</span>
+              <LogOut className="w-3.5 h-3.5" />
+              Logout
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Dashboard Grid */}
-      <main className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#84CC16]">
-              Protected Farmer Route
-            </p>
-            <h1 className="mt-1 text-2xl sm:text-3xl font-bold text-white">
-              {profile.full_name}&apos;s Farm Telemetry
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                setIsRefreshing(true);
-                refreshProfile().finally(() => setIsRefreshing(false));
-                loadTelemetry(true);
-                loadTerrain(true);
-              }}
-              disabled={isRefreshing || telemetryLoading || terrainLoading}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#0E1015]/80 border border-white/10 hover:border-[#38BDF8]/40 px-3.5 py-2 text-xs font-semibold text-[#38BDF8] transition-colors cursor-pointer disabled:opacity-60"
-            >
-              {isRefreshing || telemetryLoading || terrainLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3.5 h-3.5" />
-              )}
-              <span>Recalculate Modules</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Row 1: Profile Card + Map */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <section className="lg:col-span-5 rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-6 shadow-xl flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                <h2 className="text-base font-bold text-white">Registered Details</h2>
-                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#84CC16]/15 text-[#84CC16] border border-[#84CC16]/30">
+      <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-4 space-y-4">
+        {/* 2. Upper Bento Grid (12-col) */}
+        <div className="grid grid-cols-12 gap-4">
+          {/* A. Left Column (col-span-3): Compact Farmer Profile + Monthly Telemetry Insights */}
+          <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
+            {/* Card 1: Compact Farmer Profile Card */}
+            <section className="rounded-2xl bg-[#0E1015]/90 backdrop-blur-md border border-white/10 p-5 shadow-2xl space-y-3">
+              <p className="text-sm font-medium text-slate-300">Farmer Profile</p>
+              <div className="flex items-center justify-between gap-2">
+                <h1 className="text-lg font-bold text-white truncate">{profile.full_name}</h1>
+                <span className="shrink-0 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400">
                   Verified
                 </span>
               </div>
+              <p className="text-xs text-slate-400 flex items-center gap-1.5 truncate">
+                <MapPin className="w-3.5 h-3.5 text-[#84CC16] shrink-0" />
+                <span className="truncate">{profile.location_name}</span>
+              </p>
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10">
+                <span className="font-mono text-xs text-slate-400 flex items-center gap-1.5">
+                  <Crosshair className="w-3.5 h-3.5 text-[#38BDF8] shrink-0" />
+                  {profile.latitude.toFixed(4)}, {profile.longitude.toFixed(4)}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-[10px] text-slate-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#84CC16]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#FACC15]" />
+                  Mini Telemetry
+                </span>
+              </div>
+            </section>
 
-              <dl className="mt-5 space-y-4">
-                <div className="flex items-start gap-3">
-                  <User className="w-4 h-4 text-[#84CC16] mt-1 shrink-0" />
-                  <div>
-                    <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                      Name
-                    </dt>
-                    <dd className="text-sm sm:text-base font-semibold text-white">
-                      {profile.full_name}
-                    </dd>
-                  </div>
+            {/* Card 2: Monthly Telemetry Insights (Smooth Dual-Line SVG Chart) */}
+            <section className="flex-1 rounded-2xl bg-[#0E1015]/90 backdrop-blur-md border border-white/10 p-5 shadow-2xl flex flex-col justify-between space-y-3">
+              <div className="space-y-1.5">
+                <h2 className="text-sm font-medium text-white">Monthly Telemetry Insights</h2>
+                <div className="flex items-center gap-4 text-[11px] text-slate-300">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#38BDF8]" />
+                    Rainfall (MM)
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#84CC16]" />
+                    Soil Moisture (m³/m³)
+                  </span>
                 </div>
+              </div>
 
-                <div className="flex items-start gap-3">
-                  <Mail className="w-4 h-4 text-[#38BDF8] mt-1 shrink-0" />
-                  <div>
-                    <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                      Email
-                    </dt>
-                    <dd className="text-sm font-medium text-slate-200 break-all">
-                      {profile.email}
-                    </dd>
+              <div className="relative">
+                {activeRow && (
+                  <div className="mb-1.5 inline-flex items-center rounded-full bg-[#07090D]/90 border border-white/15 px-3 py-1 text-[11px] font-mono text-white shadow-lg">
+                    {Math.round(activeRow.rainfall_mm || 0)} mm / {getSoilMoisture(activeRow).toFixed(2)} m³/m³
                   </div>
-                </div>
+                )}
 
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-4 h-4 text-[#FACC15] mt-1 shrink-0" />
-                  <div>
-                    <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                      Registered Location
-                    </dt>
-                    <dd className="text-sm sm:text-base font-semibold text-white">
-                      {profile.location_name}
-                    </dd>
-                  </div>
-                </div>
+                {series6.length > 0 ? (
+                  <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full h-32 overflow-visible">
+                    <defs>
+                      <linearGradient id="rainAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#38BDF8" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="#38BDF8" stopOpacity="0.0" />
+                      </linearGradient>
+                      <linearGradient id="smAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#84CC16" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="#84CC16" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
 
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  <div className="rounded-xl bg-[#07090D]/90 border border-white/10 p-3.5">
-                    <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Compass className="w-3.5 h-3.5 text-[#84CC16]" />
-                      Latitude
-                    </dt>
-                    <dd className="mt-1 font-mono text-base font-bold text-[#84CC16]">
-                      {profile.latitude.toFixed(6)}
-                    </dd>
-                  </div>
+                    <path d={rainAreaPath} fill="url(#rainAreaGrad)" />
+                    <path d={smAreaPath} fill="url(#smAreaGrad)" />
+                    <path d={rainPath} fill="none" stroke="#38BDF8" strokeWidth="2.2" />
+                    <path d={smPath} fill="none" stroke="#84CC16" strokeWidth="2.2" />
 
-                  <div className="rounded-xl bg-[#07090D]/90 border border-white/10 p-3.5">
-                    <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Compass className="w-3.5 h-3.5 text-[#38BDF8]" />
-                      Longitude
-                    </dt>
-                    <dd className="mt-1 font-mono text-base font-bold text-[#38BDF8]">
-                      {profile.longitude.toFixed(6)}
-                    </dd>
+                    {series6.map((row, idx) => {
+                      const rp = rainPoints[idx];
+                      const sp = smPoints[idx];
+                      const isActive = idx === activeIdx;
+                      return (
+                        <g
+                          key={row.date}
+                          onMouseEnter={() => setHoveredIdx(idx)}
+                          onMouseLeave={() => setHoveredIdx(null)}
+                          className="cursor-pointer"
+                        >
+                          <rect
+                            x={rp.x - 14}
+                            y={padTop}
+                            width={28}
+                            height={plotH}
+                            fill="transparent"
+                          />
+                          <circle
+                            cx={rp.x}
+                            cy={rp.y}
+                            r={isActive ? 4 : 2.5}
+                            fill="#38BDF8"
+                          />
+                          <circle
+                            cx={sp.x}
+                            cy={sp.y}
+                            r={isActive ? 4 : 2.5}
+                            fill="#84CC16"
+                          />
+                          <text
+                            x={rp.x}
+                            y={chartH - 4}
+                            textAnchor="middle"
+                            fontSize="9"
+                            fill={isActive ? '#FFFFFF' : '#94A3B8'}
+                          >
+                            {row.date.slice(5, 7)}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                ) : (
+                  <div className="h-32 flex items-center justify-center text-xs text-slate-500">
+                    Loading telemetry series...
                   </div>
-                </div>
-              </dl>
+                )}
+              </div>
+            </section>
+          </div>
+
+          {/* B. Center Column (col-span-6): Telemetry Map */}
+          <section className="col-span-12 lg:col-span-6 rounded-2xl bg-[#0E1015]/90 backdrop-blur-md border border-white/10 p-5 shadow-2xl flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-white">Telemetry Map</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSoilLayerOn((v) => !v)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium border transition ${
+                    soilLayerOn
+                      ? 'bg-[#84CC16]/20 border-[#84CC16]/60 text-[#84CC16] shadow-[0_0_12px_rgba(132,204,22,0.25)]'
+                      : 'bg-white/5 border-white/10 text-slate-300'
+                  }`}
+                >
+                  Soil Moisture
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setErosionLayerOn((v) => !v)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium border transition ${
+                    erosionLayerOn
+                      ? 'bg-[#FACC15]/20 border-[#FACC15]/60 text-[#FACC15]'
+                      : 'bg-white/5 border-white/10 text-slate-300'
+                  }`}
+                >
+                  Erosion
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHeatmapLayerOn((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition ${
+                    heatmapLayerOn
+                      ? 'bg-white/10 border-[#FACC15]/50 text-white'
+                      : 'bg-white/5 border-white/10 text-slate-300'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-[#FACC15]" />
+                  Heatmap
+                </button>
+              </div>
+            </div>
+
+            <div className="relative h-[340px] rounded-xl overflow-hidden bg-[#07090D] border border-white/10">
+              <iframe
+                title="Farm Location Telemetry Map"
+                src={osmEmbedUrl}
+                className="w-full h-full border-0"
+                style={{
+                  filter: 'invert(92%) hue-rotate(180deg) saturate(0.75) brightness(0.86) contrast(1.08)',
+                }}
+                loading="lazy"
+              />
+
+              {/* Glowing SVG Farm Boundary & Heatmap Overlay */}
+              <svg
+                viewBox="0 0 600 340"
+                preserveAspectRatio="none"
+                className="pointer-events-none absolute inset-0 w-full h-full"
+              >
+                <defs>
+                  <radialGradient id="farmGlowGrad" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#84CC16" stopOpacity={soilLayerOn ? '0.35' : '0.08'} />
+                    <stop offset="65%" stopColor="#FACC15" stopOpacity={heatmapLayerOn ? '0.26' : '0.05'} />
+                    <stop offset="100%" stopColor="#FACC15" stopOpacity="0" />
+                  </radialGradient>
+                </defs>
+                <polygon
+                  points="210,115 340,95 405,175 350,245 220,235 180,165"
+                  fill="url(#farmGlowGrad)"
+                  stroke={soilLayerOn ? '#84CC16' : '#38BDF8'}
+                  strokeWidth="2"
+                  style={{ filter: 'drop-shadow(0 0 8px rgba(132,204,22,0.6))' }}
+                />
+                {erosionLayerOn && (
+                  <ellipse
+                    cx="325"
+                    cy="185"
+                    rx="78"
+                    ry="44"
+                    fill="#FACC15"
+                    fillOpacity="0.28"
+                    stroke="#FACC15"
+                    strokeWidth="1.5"
+                    strokeDasharray="4 3"
+                  />
+                )}
+              </svg>
+
+              {/* Bottom-Right Map Controls */}
+              <div className="absolute bottom-3 right-3 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setZoomDelta((d) => Math.max(0.005, Number((d - 0.005).toFixed(3))))}
+                  aria-label="Zoom in"
+                  className="w-8 h-8 rounded-lg bg-[#0E1015]/90 backdrop-blur-md border border-white/15 flex items-center justify-center text-white hover:border-[#84CC16]/50 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomDelta((d) => Math.min(0.08, Number((d + 0.005).toFixed(3))))}
+                  aria-label="Zoom out"
+                  className="w-8 h-8 rounded-lg bg-[#0E1015]/90 backdrop-blur-md border border-white/15 flex items-center justify-center text-white hover:border-[#84CC16]/50 transition"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <a
+                  href={osmViewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0E1015]/90 backdrop-blur-md border border-white/15 px-3 h-8 text-xs font-medium text-white hover:border-[#84CC16]/50 transition"
+                >
+                  Open Map
+                  <ExternalLink className="w-3 h-3 text-[#84CC16]" />
+                </a>
+              </div>
             </div>
           </section>
 
-          <section className="lg:col-span-7 rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 shadow-xl overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-white">Geolocation Preview</h2>
-                <p className="text-xs text-slate-400">
-                  OpenStreetMap Pin ({profile.latitude.toFixed(4)}, {profile.longitude.toFixed(4)})
-                </p>
-              </div>
-              <a
-                href={osmViewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#84CC16] hover:underline"
-              >
-                <span>Open OSM</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
+          {/* C. Right Column (col-span-3): Telemetry Gauges (2x2 Radial Ring Grid) */}
+          <section className="col-span-12 lg:col-span-3 rounded-2xl bg-[#0E1015]/90 backdrop-blur-md border border-white/10 p-5 shadow-2xl flex flex-col justify-between gap-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white">Telemetry Gauges</h2>
+              <Flame className="w-4 h-4 text-[#FACC15]" />
             </div>
-
-            <div className="flex-1 min-h-[300px] bg-[#07090D]">
-              <iframe
-                title="Farm Location OpenStreetMap"
-                src={osmEmbedUrl}
-                className="w-full h-full min-h-[300px] border-0"
-                loading="lazy"
+            <div className="grid grid-cols-2 gap-3 my-auto">
+              <RadialGauge
+                label="Water Security"
+                displayValue={`${Math.round(waterSecurityPct)}%`}
+                percent={waterSecurityPct}
+                strokeColor="#84CC16"
+                gradientId="waterSecGrad"
+                termKey="water_balance"
+              />
+              <RadialGauge
+                label="NDVI (Vegetation)"
+                displayValue={ndviNum.toFixed(2)}
+                percent={Math.min(100, Math.max(0, ndviNum * 100))}
+                strokeColor="#38BDF8"
+                termKey="ndvi"
+              />
+              <RadialGauge
+                label="Slope Erosion"
+                displayValue={`${Math.round(erosionScore)}/100`}
+                percent={erosionScore}
+                strokeColor="#FACC15"
+                termKey="rusle"
+              />
+              <RadialGauge
+                label="Frost Risk"
+                displayValue={`${frostPct}%`}
+                percent={frostPct}
+                strokeColor="#84CC16"
+                termKey="frost_risk"
               />
             </div>
           </section>
         </div>
 
-        {/* Row 2: Module 1 Vulnerability & Stress Layer */}
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Activity className="w-5 h-5 text-[#84CC16]" />
-                Module 1: Vulnerability &amp; Stress Telemetry
-              </h2>
-              {telemetry && (
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {telemetry.territory_mode} &bull; Window: {telemetry.window.start_date} to{' '}
-                  {telemetry.window.end_date}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {telemetryLoading && !telemetry && (
-            <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-10 flex flex-col items-center justify-center gap-3 text-slate-300">
-              <Loader2 className="w-7 h-7 animate-spin text-[#84CC16]" />
-              <p className="text-sm font-medium">
-                Calculating Module 1 GEE &amp; climate telemetry for ({profile.latitude.toFixed(4)},{' '}
-                {profile.longitude.toFixed(4)})...
-              </p>
-            </div>
-          )}
-
-          {telemetryError && (
-            <div className="rounded-2xl border border-[#FACC15]/30 bg-[#FACC15]/10 p-4 flex items-start gap-3 text-sm text-[#FACC15]">
-              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">Module 1 Telemetry Error</p>
-                <p className="text-xs opacity-90 mt-0.5">{telemetryError}</p>
-              </div>
-            </div>
-          )}
-
-          {telemetry && rating && (
-            <>
-              {/* Location Rating + 4 Resilience Sub-Scores */}
-              <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-6 shadow-xl">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-                  <div className="lg:col-span-4 flex items-center gap-4">
-                    <div className="w-20 h-20 rounded-2xl bg-[#84CC16]/15 border border-[#84CC16]/40 flex flex-col items-center justify-center shrink-0">
-                      <span className="text-2xl font-extrabold text-[#84CC16]">
-                        {rating.letter_grade}
-                      </span>
-                      <span className="text-[11px] font-mono text-slate-300">
-                        {rating.overall_score}/100
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
-                        Agro-Climate Rating
-                      </p>
-                      <p className="text-sm font-bold text-white mt-0.5">{rating.risk_tier}</p>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        {rating.recommendation}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-8 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                      { label: 'Water Security', val: rating.water_security_rate, color: '#38BDF8' },
-                      {
-                        label: 'Thermal Resilience',
-                        val: rating.thermal_resilience_rate,
-                        color: '#FACC15',
-                      },
-                      {
-                        label: 'Vegetative Vitality',
-                        val: rating.vegetation_vitality_rate,
-                        color: '#84CC16',
-                      },
-                      {
-                        label: 'Microclimate Stability',
-                        val: rating.microclimate_stability_rate,
-                        color: '#A78BFA',
-                      },
-                    ].map((metric) => (
-                      <div
-                        key={metric.label}
-                        className="rounded-xl bg-[#07090D]/90 border border-white/10 p-3.5"
-                      >
-                        <p className="text-[11px] font-medium text-slate-400">{metric.label}</p>
-                        <p className="mt-1 text-xl font-bold font-mono text-white">
-                          {metric.val}%
-                        </p>
-                        <div className="mt-2 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${Math.min(100, metric.val)}%`, backgroundColor: metric.color }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* 3 Analytics Cards: Water Stress, Vegetation/Heatwave, Microclimate */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Water Stress
-                    </span>
-                    <Droplets className="w-4 h-4 text-[#38BDF8]" />
-                  </div>
-                  <p className="mt-3 text-2xl font-bold font-mono text-[#38BDF8]">
-                    {latestWater ? `${latestWater.water_stress_index}/100` : 'N/A'}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Drought Warnings:{' '}
-                    <span className="text-white font-semibold">
-                      {water?.drought_warnings_count ?? 0}
-                    </span>{' '}
-                    &bull; Active:{' '}
-                    <span
-                      className={
-                        water?.active_drought_warning
-                          ? 'text-[#FACC15] font-semibold'
-                          : 'text-[#84CC16] font-semibold'
-                      }
-                    >
-                      {water?.active_drought_warning ? 'YES' : 'NO'}
-                    </span>
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Vegetation &amp; Heatwaves
-                    </span>
-                    <Leaf className="w-4 h-4 text-[#84CC16]" />
-                  </div>
-                  <p className="mt-3 text-2xl font-bold font-mono text-[#84CC16]">
-                    NDVI {telemetry.summary_metrics?.sentinel2?.s2_ndvi ?? 'N/A'}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Heatwave Correlation (r):{' '}
-                    <span className="text-white font-mono font-semibold">
-                      {pearsonR !== null && pearsonR !== undefined ? pearsonR : 'N/A'}
-                    </span>{' '}
-                    &bull; Events:{' '}
-                    <span className="text-white font-semibold">
-                      {veg?.vulnerability_events?.length ?? 0}
-                    </span>
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Microclimate Stress
-                    </span>
-                    <Wind className="w-4 h-4 text-[#FACC15]" />
-                  </div>
-                  <p className="mt-3 text-2xl font-bold font-mono text-[#FACC15]">
-                    {micro?.stress_summary?.stomatal_vpd_stress_steps ?? 0} VPD Steps
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
-                    <Flame className="w-3.5 h-3.5 text-slate-400" />
-                    Fungal Risk Steps:{' '}
-                    <span className="text-white font-semibold">
-                      {micro?.stress_summary?.fungal_humidity_risk_steps ?? 0}
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Recent Monthly Water Stress Series */}
-              {recentSeries.length > 0 && (
-                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 overflow-hidden">
-                  <div className="px-6 py-4 border-b border-white/10">
-                    <h3 className="text-sm font-bold text-white">
-                      Recent Monthly Telemetry (Module 1 Series)
-                    </h3>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-[#07090D]/60 text-slate-400 uppercase tracking-wider">
-                        <tr>
-                          <th className="px-6 py-3">Month</th>
-                          <th className="px-6 py-3">Water Stress</th>
-                          <th className="px-6 py-3">Soil Moisture</th>
-                          <th className="px-6 py-3">ET (mm)</th>
-                          <th className="px-6 py-3">Rainfall (mm)</th>
-                          <th className="px-6 py-3">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5 text-slate-200">
-                        {recentSeries.map((row) => (
-                          <tr key={row.date} className="hover:bg-white/[0.02]">
-                            <td className="px-6 py-3 font-mono">{row.date}</td>
-                            <td className="px-6 py-3 font-mono text-[#38BDF8] font-semibold">
-                              {row.water_stress_index}
-                            </td>
-                            <td className="px-6 py-3 font-mono">
-                              {(() => {
-                                const sm = row.sm_rootzone_m3m3 ?? row.soil_moisture_m3m3;
-                                return sm !== null && sm !== undefined ? Number(sm).toFixed(4) : 'N/A';
-                              })()}
-                            </td>
-                            <td className="px-6 py-3 font-mono">{row.et_mm}</td>
-                            <td className="px-6 py-3 font-mono">{row.rainfall_mm}</td>
-                            <td className="px-6 py-3">
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                  row.drought_warning
-                                    ? 'bg-[#FACC15]/15 text-[#FACC15]'
-                                    : 'bg-[#84CC16]/15 text-[#84CC16]'
-                                }`}
-                              >
-                                {row.drought_severity}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </section>
-
-        {/* Row 3: Module 2 Terrain & Soil Health Layer */}
-        <section className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Mountain className="w-5 h-5 text-[#FACC15]" />
-                Module 2: Terrain &amp; Soil Health Layer
-              </h2>
-              {terrain && (
-                <p className="text-xs text-slate-400 mt-0.5">
-                  GEE SRTM + IMERG + WorldCover + NASA GEDI + OpenLandMap &bull; Window:{' '}
-                  {terrain.date_range}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {terrainLoading && !terrain && (
-            <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-10 flex flex-col items-center justify-center gap-3 text-slate-300">
-              <Loader2 className="w-7 h-7 animate-spin text-[#FACC15]" />
-              <p className="text-sm font-medium">
-                Calculating Module 2 GEE erosion risk &amp; soil texture for (
-                {profile.latitude.toFixed(4)}, {profile.longitude.toFixed(4)})...
-              </p>
-            </div>
-          )}
-
-          {terrainError && (
-            <div className="rounded-2xl border border-[#FACC15]/30 bg-[#FACC15]/10 p-4 flex items-start gap-3 text-sm text-[#FACC15]">
-              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">Module 2 Terrain Error</p>
-                <p className="text-xs opacity-90 mt-0.5">{terrainError}</p>
-              </div>
-            </div>
-          )}
-
-          {terrain && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Erosion Risk Score
-                    </span>
-                    <Mountain className="w-4 h-4 text-[#FACC15]" />
-                  </div>
-                  <p className="mt-3 text-2xl font-bold font-mono text-[#FACC15]">
-                    {terrain.erosion_risk_score} / 100
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Max Slope:{' '}
-                    <span className="text-white font-mono font-semibold">
-                      {terrain.raw_slope_degrees}&deg;
-                    </span>
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      USDA Soil Texture
-                    </span>
-                    <Layers className="w-4 h-4 text-[#84CC16]" />
-                  </div>
-                  <p className="mt-3 text-2xl font-bold text-[#84CC16]">{terrain.soil_type}</p>
-                  <p className="text-xs text-slate-400 mt-1">OpenLandMap USDA-TT</p>
-                </div>
-
-                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      Canopy &amp; Tree Cover
-                    </span>
-                    <Trees className="w-4 h-4 text-[#84CC16]" />
-                  </div>
-                  <p className="mt-3 text-2xl font-bold font-mono text-white">
-                    {terrain.tree_cover_pct}%
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {terrain.canopy_status} &bull; Exposed:{' '}
-                    <span className="text-white font-mono">{terrain.exposed_cover_pct}%</span>
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      IMERG Rainfall
-                    </span>
-                    <CloudRain className="w-4 h-4 text-[#38BDF8]" />
-                  </div>
-                  <p className="mt-3 text-2xl font-bold font-mono text-[#38BDF8]">
-                    {terrain.raw_rainfall_mm} mm/mo
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Canopy Height:{' '}
-                    <span className="text-white font-mono">{terrain.canopy_height_m}m</span>
-                  </p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Terrain &amp; Canopy Assessment
-                </p>
-                <p className="mt-1.5 text-sm text-slate-200 leading-relaxed">
-                  {terrain.dynamic_description}
-                </p>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* Row 4: Module 3 Global Rotation Strategy & AI Decision Engine */}
+        {/* 3. Lower Bento Grid (12-col): Scenario Weighting + Crop Rotation Strategy Comparison */}
         <RotationStrategyModule profile={profile} telemetry={telemetry} terrain={terrain} />
       </main>
     </div>

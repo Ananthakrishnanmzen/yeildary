@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type {
+  ClimateScenario,
   ConstraintWeights,
   FarmerProfile,
   Module3StrategyResponse,
@@ -150,11 +151,13 @@ export async function fetchModule3StrategyApi(refresh = false): Promise<Module3S
 export async function recalculateModule3StrategyApi(
   weights: ConstraintWeights,
   preferredLanguage?: string,
+  climateScenario?: ClimateScenario,
 ): Promise<Module3StrategyResponse> {
   const { data } = await apiClient.post<Module3StrategyResponse>(
     '/module3/recalculate/',
     {
       ...weights,
+      ...(climateScenario ?? {}),
       ...(preferredLanguage ? { preferred_language: preferredLanguage } : {}),
     },
     { timeout: 30000 },

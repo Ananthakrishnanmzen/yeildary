@@ -118,6 +118,12 @@ export interface ConstraintWeights {
   water_availability: number;
   budget: number;
   market_demand: number;
+  equipment_access?: number;
+}
+
+export interface ClimateScenario {
+  rainfall_delta_pct: number;
+  temp_delta_c: number;
 }
 
 export interface AlertItem {
@@ -134,6 +140,11 @@ export interface StrategyDetail {
   soil_health_impact_pct: number;
   market_viability_score: number;
   market_demand_status: 'High' | 'Moderate' | 'Crashing';
+  pest_cycle_disruption_score?: number;
+  pest_disruption_note?: string;
+  forage_biomass_potential?: 'Low' | 'Moderate' | 'High';
+  forage_biomass_score?: number;
+  forage_biomass_note?: string;
   agronomic_reasoning: string;
 }
 
@@ -142,6 +153,7 @@ export interface Module3StrategyData {
   baseline: StrategyDetail;
   resilience_build: StrategyDetail;
   water_saver: StrategyDetail;
+  local_expertise_charter?: string;
 }
 
 export interface Module3StrategyResponse {
@@ -149,6 +161,7 @@ export interface Module3StrategyResponse {
   used_fallback: boolean;
   model_used: string;
   constraint_weights: ConstraintWeights;
+  climate_scenario?: ClimateScenario;
   preferred_language: string;
   preferred_language_code: string;
   location_name: string;

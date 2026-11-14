@@ -28,6 +28,11 @@ class StrategyDetail(BaseModel):
     soil_health_impact_pct: int = Field(ge=-100, le=100)
     market_viability_score: int = Field(ge=0, le=100)
     market_demand_status: Literal['High', 'Moderate', 'Crashing']
+    pest_cycle_disruption_score: int = Field(ge=0, le=100)
+    pest_disruption_note: str
+    forage_biomass_potential: Literal['Low', 'Moderate', 'High']
+    forage_biomass_score: int = Field(ge=0, le=100)
+    forage_biomass_note: str
     agronomic_reasoning: str
 
 
@@ -42,6 +47,7 @@ class RotationResponseSchema(BaseModel):
     baseline: StrategyDetail
     resilience_build: StrategyDetail
     water_saver: StrategyDetail
+    local_expertise_charter: str
 
 
 def _clamp_int(value: float, low: int, high: int) -> int:
@@ -75,6 +81,17 @@ _TRANSLATIONS = {
             '{stress:.1f} ജലസമ്മർദ്ദ സൂചികയും {rain} മഴയും കണക്കിലെടുത്ത് '
             'ജലനഷ്ടം കുറയ്ക്കുന്ന പുതയിട്ട ഇഞ്ചി, മഞ്ഞൾ തുടങ്ങിയ വിളകൾ സംയോജിപ്പിക്കുന്നു.'
         ),
+        'pest_base': 'തുടർച്ചയായ ഒരേ വിള കൃഷി വേര്-നിമാവിരകൾക്കും ഫംഗസ് വാട്ടത്തിനും സാധ്യത കൂട്ടുന്നു.',
+        'pest_res': 'പയറുവർഗ്ഗങ്ങളും രാമച്ചവും വേര്-നിമാവിരകളെയും ഫൈറ്റോഫ്തോറ കുമിളിനെയും തടയുന്നു.',
+        'pest_wat': 'ഇഞ്ചി-മഞ്ഞൾ ജൈവ രാസവസ്തുക്കൾ മണ്ണിലെ രോഗാണുക്കളുടെ ചക്രം മുറിക്കുന്നു.',
+        'forage_base': 'കുറഞ്ഞ കാലിത്തീറ്റ അവശിഷ്ടം; പ്രാഥമിക വിള ഉൽപാദനത്തിന് മുൻഗണന.',
+        'forage_res': 'വൻപയർ ഇലകളും രാമച്ചത്തിന്റെ അരിഞ്ഞ ഇലകളും കാലിത്തീറ്റയും പുതയിടലും നൽകുന്നു.',
+        'forage_wat': 'വാഴയിലകളും ഇഞ്ചി-മഞ്ഞൾ തണ്ടുകളും ജൈവ പുതയിടലിനും കാലിത്തീറ്റയ്ക്കും അനുയോജ്യം.',
+        'charter': (
+            'Yieldary AI എന്നത് പ്രാദേശിക കർഷകരുടെ അനുഭവസമ്പത്തിനെയും കൃഷിഭവൻ ഉദ്യോഗസ്ഥരുടെ നിർദ്ദേശങ്ങളെയും '
+            'ലബോറട്ടറി മണ്ണ് പരിശോധനയെയും സഹായിക്കുന്ന ഒരു തീരുമാന-സഹായ സംവിധാനം മാത്രമാണ്. '
+            'ചെരിവുകളുടെ സ്ഥിരത, പ്രാദേശിക വിത്തിനങ്ങൾ, കീടനിരീക്ഷണം എന്നിവ നേരിട്ട് പരിശോധിച്ചതിന് ശേഷമേ അന്തിമ കൃഷി തീരുമാനം എടുക്കാവൂ.'
+        ),
     },
     'tamil': {
         'advisory_title': 'செயற்கைக்கோள் கள எச்சரிக்கை ({location})',
@@ -101,6 +118,17 @@ _TRANSLATIONS = {
         'water_reason': (
             '{stress:.1f} நீர் அழுத்த நிலையிலும் {rain} மழையிலும் ஈரப்பதத்தைத் தக்கவைக்க '
             '{wat_crops} உதவுகிறது.'
+        ),
+        'pest_base': 'ஒரே பயிர் தொடர்ச்சி வேர் முடிச்சு நூற்புழு மற்றும் பூஞ்சை வாடல் அபாயத்தை அதிகரிக்கும்.',
+        'pest_res': 'தட்டைப்பயறு மற்றும் வெட்டிவேர் பூஞ்சை (Phytophthora) மற்றும் நூற்புழு சுழற்சியை முறிக்கின்றன.',
+        'pest_wat': 'இஞ்சி-மஞ்சள் வேர் சுரப்புகள் மண்வழி நோய்க்கிருமிகளின் சுழற்சியைக் குறைக்கின்றன.',
+        'forage_base': 'குறைந்த கால்நடை தீவன எச்சம்; முதன்மை மகசூல் மையம்.',
+        'forage_res': 'தட்டைப்பயறு இலைகள் மற்றும் வெட்டிவேர் தழைகள் சத்தான தீவனமாகவும் மூடாக்காகவும் பயன்படும்.',
+        'forage_wat': 'வாழை மற்றும் மஞ்சள் தழைகள் பசுந்தாள் உரம் மற்றும் கால்நடை தீவனத்தை வழங்குகின்றன.',
+        'charter': (
+            'Yieldary AI என்பது உள்ளூர் விவசாயிகளின் பாரம்பரிய அறிவு, வேளாண் அலுவலர்களின் ஆலோசனை மற்றும் '
+            'மண் பரிசோதனை ஆய்வக முடிவுகளுக்கு மாற்றல்ல — அவற்றிற்குத் துணையாக செயல்படும் செயற்கைக்கோள் உதவியாளர் மட்டுமே. '
+            'வரப்பு உறுதித்தன்மை, உள்ளூர் விதை ரகங்கள் மற்றும் பூச்சி கண்காணிப்பை களத்தில் சரிபார்க்கவும்.'
         ),
     },
     'hindi': {
@@ -129,6 +157,17 @@ _TRANSLATIONS = {
             '{stress:.1f} जल तनाव और {rain} वर्षा के बीच नमी बनाए रखने के लिए '
             '{wat_crops} प्रभावी हैं।'
         ),
+        'pest_base': 'लगातार एक ही फसल लेने से जड़-गांठ सूत्रकृमि और फफूंद उकठा का चक्र बना रहता है।',
+        'pest_res': 'लोबिया और खस घास की जड़ें फफूंद (Phytophthora) और सूत्रकृमि चक्र को तोड़ती हैं।',
+        'pest_wat': 'अदरक और हल्दी के जैव-यौगिक मिट्टी जनित रोगजनकों के चक्र को कम करते हैं।',
+        'forage_base': 'सीमित चारा अवशेष; मुख्य फसल उत्पादन पर केंद्रित।',
+        'forage_res': 'लोबिया का हरा चारा और खस की कटाई पशुधन चारे व मल्चिंग के लिए उत्तम है।',
+        'forage_wat': 'केले के पत्ते और हल्दी-अदरक के अवशेष हरी खाद और मल्च बायोमास देते हैं।',
+        'charter': (
+            'Yieldary AI स्थानीय किसानों के अनुभव, कृषि विज्ञान केंद्र अधिकारियों और भौतिक प्रयोगशाला मृदा परीक्षण '
+            'का विकल्प नहीं है — यह केवल उपग्रह आधारित निर्णय-सहायता साथी है। '
+            'खेत की ढलान, स्थानीय बीज किस्मों और कीट निगरानी का प्रत्यक्ष निरीक्षण अवश्य करें।'
+        ),
     },
     'english': {
         'advisory_title': 'Telemetry Advisory ({location})',
@@ -155,6 +194,17 @@ _TRANSLATIONS = {
         'water_reason': (
             'Combines {wat_crops} to optimize water-use efficiency under '
             '{stress:.1f} Water Stress Index and {rain} precipitation.'
+        ),
+        'pest_base': 'Continuous monoculture sustains root-knot nematode and fungal wilt pressure.',
+        'pest_res': 'Legume non-host alternation and vetiver root exudates disrupt Phytophthora & nematode cycles.',
+        'pest_wat': 'Bio-fumigant Zingiberaceae rhizomes suppress soil-borne fungal pathogens across seasons.',
+        'forage_base': 'Minimal fodder residue; primary harvest remains focused on cash-crop yield.',
+        'forage_res': 'High-protein legume haulms and vetiver prunings supply livestock fodder and contour mulch.',
+        'forage_wat': 'Banana pseudostems and ginger/turmeric tops provide green-manure mulch and supplementary forage.',
+        'charter': (
+            'Yieldary AI is an orbital decision-support companion designed to augment—never replace—the generational '
+            'wisdom of local farmers, Krishi Bhavan agricultural officers, and physical laboratory soil testing. '
+            'Always verify terrace integrity, local seed varieties, and active pest scouting on-farm.'
         ),
     },
 }
@@ -258,6 +308,11 @@ def _fallback_decision_matrix(payload: dict) -> dict:
     water_w = float(weights.get('water_availability', 50))
     budget_w = float(weights.get('budget', 50))
     market_w = float(weights.get('market_demand', 50))
+    equip_w = float(weights.get('equipment_access', 50))
+
+    climate = farmer.get('climate_scenario') or {}
+    rain_delta_pct = float(climate.get('rainfall_delta_pct', 0))
+    temp_delta_c = float(climate.get('temp_delta_c', 0.0))
 
     smap = telemetry.get('current_smap_moisture')
     rain = telemetry.get('recent_gpm_rainfall_mm')
@@ -266,9 +321,12 @@ def _fallback_decision_matrix(payload: dict) -> dict:
     slope = telemetry.get('slope_degrees')
     soil_texture = telemetry.get('soil_texture_class') or 'local soil'
 
-    rain_val = float(rain) if rain is not None else None
-    stress_val = float(stress) if stress is not None else 35.0
-    erosion_val = float(erosion) if erosion is not None else 30.0
+    base_rain = float(rain) if rain is not None else None
+    rain_val = base_rain * (1.0 + rain_delta_pct / 100.0) if base_rain is not None else None
+    base_stress = float(stress) if stress is not None else 35.0
+    stress_val = max(0.0, min(100.0, base_stress + temp_delta_c * 4.5 - rain_delta_pct * 0.25))
+    base_erosion = float(erosion) if erosion is not None else 30.0
+    erosion_val = max(0.0, min(100.0, base_erosion + max(0.0, rain_delta_pct) * 0.35))
     slope_val = float(slope) if slope is not None else 4.0
     smap_str = f'{float(smap):.3f} m³/m³' if smap is not None else 'N/A'
     rain_str = f'{rain_val:.1f} mm/mo' if rain_val is not None else 'N/A'
@@ -308,9 +366,18 @@ def _fallback_decision_matrix(payload: dict) -> dict:
             }
         )
 
-    baseline_suitability = _clamp_int(78 - erosion_val * 0.28 - stress_val * 0.18, 25, 92)
-    resilience_suitability = _clamp_int(76 + (budget_w - 50) * 0.12 - erosion_val * 0.08, 45, 96)
-    water_suitability = _clamp_int(74 + (100 - water_w) * 0.15 - stress_val * 0.05, 45, 95)
+    manual_slope_bonus = 6.0 if (equip_w < 40 and slope_val > 12.0) else 0.0
+    baseline_suitability = _clamp_int(78 - erosion_val * 0.28 - stress_val * 0.18 - temp_delta_c * 2.5, 20, 92)
+    resilience_suitability = _clamp_int(
+        76 + (budget_w - 50) * 0.12 - erosion_val * 0.08 + manual_slope_bonus,
+        45,
+        96,
+    )
+    water_suitability = _clamp_int(
+        74 + (100 - water_w) * 0.15 - stress_val * 0.05 + temp_delta_c * 1.5,
+        45,
+        95,
+    )
 
     return {
         'realtime_alerts': alerts,
@@ -322,6 +389,11 @@ def _fallback_decision_matrix(payload: dict) -> dict:
             'soil_health_impact_pct': _clamp_int(10 - erosion_val * 0.35, -60, 40),
             'market_viability_score': _clamp_int(55 + market_w * 0.25, 30, 95),
             'market_demand_status': market_status,
+            'pest_cycle_disruption_score': 28,
+            'pest_disruption_note': t['pest_base'],
+            'forage_biomass_potential': 'Low',
+            'forage_biomass_score': 25,
+            'forage_biomass_note': t['forage_base'],
             'agronomic_reasoning': t['baseline_reason'].format(**ctx),
         },
         'resilience_build': {
@@ -332,6 +404,11 @@ def _fallback_decision_matrix(payload: dict) -> dict:
             'soil_health_impact_pct': _clamp_int(32 + min(25, erosion_val * 0.25), 10, 85),
             'market_viability_score': _clamp_int(62 + market_w * 0.24, 35, 95),
             'market_demand_status': 'High' if market_w >= 65 else 'Moderate',
+            'pest_cycle_disruption_score': 86,
+            'pest_disruption_note': t['pest_res'],
+            'forage_biomass_potential': 'High',
+            'forage_biomass_score': 82,
+            'forage_biomass_note': t['forage_res'],
             'agronomic_reasoning': t['resilience_reason'].format(**ctx),
         },
         'water_saver': {
@@ -342,8 +419,14 @@ def _fallback_decision_matrix(payload: dict) -> dict:
             'soil_health_impact_pct': 22,
             'market_viability_score': _clamp_int(58 + market_w * 0.25, 35, 94),
             'market_demand_status': 'Moderate',
+            'pest_cycle_disruption_score': 74,
+            'pest_disruption_note': t['pest_wat'],
+            'forage_biomass_potential': 'Moderate',
+            'forage_biomass_score': 64,
+            'forage_biomass_note': t['forage_wat'],
             'agronomic_reasoning': t['water_reason'].format(**ctx),
         },
+        'local_expertise_charter': t['charter'],
     }
 
 
@@ -361,10 +444,13 @@ def generate_rotation_strategies(payload: dict) -> tuple[dict, bool, str]:
     system_instruction = (
         'You are an autonomous Precision Agriculture Systems Intelligence Engine analyzing NASA Earth Observation data. '
         'Infer the agro-climatic zone strictly from farmer_context.coordinates and the provided telemetry values. '
-        'Evaluate farmer_context.baseline_crops and select regionally, climatically, and pedologically appropriate '
-        'rotation crops for that exact global coordinate—never output generic placeholders like "Regional Staple". '
-        f'CRITICAL: Write all human-readable values (alert_title, alert_message, strategy_name, agronomic_reasoning) fluently in {preferred_lang}. '
-        "Keep JSON keys and market_demand_status ('High', 'Moderate', 'Crashing') and severity ('HIGH', 'MEDIUM', 'LOW') in English."
+        'Evaluate farmer_context.baseline_crops, constraint_weights (including equipment_access), and climate_scenario '
+        '(rainfall_delta_pct, temp_delta_c). Select regionally, climatically, and pedologically appropriate rotation crops '
+        'for that exact global coordinate—never output generic placeholders like "Regional Staple". '
+        'For each strategy, include pest_cycle_disruption_score, pest_disruption_note, forage_biomass_potential, '
+        'forage_biomass_score, forage_biomass_note, and a top-level local_expertise_charter. '
+        f'CRITICAL: Write all human-readable values (alert_title, alert_message, strategy_name, agronomic_reasoning, pest_disruption_note, forage_biomass_note, local_expertise_charter) fluently in {preferred_lang}. '
+        "Keep JSON keys, market_demand_status ('High', 'Moderate', 'Crashing'), forage_biomass_potential ('Low', 'Moderate', 'High'), and severity ('HIGH', 'MEDIUM', 'LOW') in English."
     )
 
     configured_model = os.environ.get('GEMINI_MODEL', '').strip()

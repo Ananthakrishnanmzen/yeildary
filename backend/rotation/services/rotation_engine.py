@@ -220,6 +220,7 @@ def build_dynamic_gemini_payload(
     hist_data: dict,
     market_data: dict,
     weights: dict,
+    climate_scenario: dict | None = None,
 ) -> dict:
     return {
         'farmer_context': {
@@ -229,6 +230,7 @@ def build_dynamic_gemini_payload(
             'baseline_crops': profile.crops_grown or [],
             'preferred_language': profile.get_preferred_language_display() or profile.preferred_language or 'English',
             'constraint_weights': weights,
+            'climate_scenario': climate_scenario or {'rainfall_delta_pct': 0, 'temp_delta_c': 0.0},
         },
         'historical_3yr_trends': {
             'ndvi_anomaly': hist_data.get('ndvi_anomaly'),
@@ -263,17 +265,30 @@ def _normalize_weights(weights: dict | None, existing: dict | None = None) -> di
     return base
 
 
+def _normalize_climate_scenario(climate_scenario: dict | None) -> dict[str, float]:
+    rain = 0.0
+    temp = 0.0
+    if isinstance(climate_scenario, dict):
+        if climate_scenario.get('rainfall_delta_pct') is not None:
+            rain = max(-40.0, min(40.0, float(climate_scenario['rainfall_delta_pct'])))
+        if climate_scenario.get('temp_delta_c') is not None:
+            temp = max(0.0, min(3.5, float(climate_scenario['temp_delta_c'])))
+    return {'rainfall_delta_pct': rain, 'temp_delta_c': round(temp, 2)}
+
+
 def run_rotation_pipeline_for_profile(
     profile: FarmerProfile,
     *,
     weights: dict | None = None,
     preferred_language: str | None = None,
+    climate_scenario: dict | None = None,
     skip_gee_history: bool = False,
 ) -> RotationStrategyReport:
     """Run Module 3 using cached Module 1 & Module 2 records and save the report."""
 
     report, _ = RotationStrategyReport.objects.get_or_create(profile=profile)
     normalized_weights = _normalize_weights(weights, report.constraint_weights)
+    normalized_climate = _normalize_climate_scenario(climate_scenario)
 
     if preferred_language:
         valid_codes = {code for code, _label in FarmerProfile.Language.choices}
@@ -322,6 +337,7 @@ def run_rotation_pipeline_for_profile(
         hist_data,
         market_data,
         normalized_weights,
+        normalized_climate,
     )
 
     ai_output, used_fallback, model_used = generate_rotation_strategies(payload)
@@ -337,6 +353,7 @@ def run_rotation_pipeline_for_profile(
         'baseline': ai_output.get('baseline', {}),
         'resilience_build': ai_output.get('resilience_build', {}),
         'water_saver': ai_output.get('water_saver', {}),
+        'local_expertise_charter': ai_output.get('local_expertise_charter', ''),
     }
     report.error_message = ''
     report.save()
