@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { FarmerProfile, RegisterPayload, TelemetryReport, TerrainReport } from '../types/farmer';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 export const TOKEN_STORAGE_KEY = 'yieldary_jwt_access';
 export const REFRESH_STORAGE_KEY = 'yieldary_jwt_refresh';
@@ -49,6 +49,70 @@ export async function loginFarmerApi(email: string, password: string): Promise<T
 
 export async function fetchFarmerProfileApi(): Promise<FarmerProfile> {
   const { data } = await apiClient.get<FarmerProfile>('/profile/');
+  return data;
+}
+
+
+export interface PhoneSendResponse {
+  ok: boolean;
+  message?: string;
+  phone_number?: string;
+  dev_code?: string;
+  error?: string;
+}
+
+export async function sendPhoneCodeApi(phone: string): Promise<PhoneSendResponse> {
+  const { data } = await axios.post<PhoneSendResponse>('/api/phone/send-code/', { phone_number: phone });
+  return data;
+}
+
+export async function verifyPhoneCodeApi(phone: string, code: string): Promise<PhoneSendResponse> {
+  const { data } = await axios.post<PhoneSendResponse>('/api/phone/verify-code/', { phone_number: phone, code });
+  return data;
+}
+
+export interface PlaceResult {
+  name: string;
+  display_name: string;
+  lat: number;
+  lon: number;
+  type?: string;
+}
+
+export async function searchPlaceApi(q: string): Promise<PlaceResult[]> {
+  const { data } = await axios.get<PlaceResult[]>('/api/location/search/', { params: { q, limit: 6 } });
+  return Array.isArray(data) ? data : [];
+}
+
+export interface FarmerSignupApiPayload {
+  user_type: string;
+  name: string;
+  email: string;
+  phone_number: string;
+  place_name: string;
+  latitude: string;
+  longitude: string;
+  farm_area_acres: string;
+  crops_grown: string;
+  gender: string;
+  age: string;
+  preferred_language: string;
+  password: string;
+  confirm_password: string;
+  terms_accepted: boolean;
+}
+
+export interface FarmerSignupApiResponse {
+  ok: boolean;
+  access?: string;
+  refresh?: string;
+  redirect?: string;
+  errors?: Record<string, string[]>;
+  error?: string;
+}
+
+export async function signupFarmerApi(payload: FarmerSignupApiPayload): Promise<FarmerSignupApiResponse> {
+  const { data } = await axios.post<FarmerSignupApiResponse>('/api/farmer/signup/', payload);
   return data;
 }
 

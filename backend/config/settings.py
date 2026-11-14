@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'accounts.apps.AccountsConfig',
     'telemetry.apps.TelemetryConfig',
     'terrain.apps.TerrainConfig',
+    'Farmer.apps.FarmerConfig',
 ]
 
 MIDDLEWARE = [
@@ -43,6 +44,15 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+AUTHENTICATION_BACKENDS = [
+    'Farmer.backends.EmailBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+LOGIN_URL = 'farmer:login'
+LOGIN_REDIRECT_URL = 'farmer:dashboard'
+LOGOUT_REDIRECT_URL = 'farmer:login'
 
 ROOT_URLCONF = 'config.urls'
 
@@ -116,6 +126,14 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]
+
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
@@ -131,3 +149,35 @@ GEE_SERVICE_ACCOUNT_KEY_PATH = os.environ.get(
     'GEE_SERVICE_ACCOUNT_KEY_PATH',
     str(BASE_DIR / 'gee-key.json'),
 )
+
+# Farmer dashboard destination after login/signup.
+FARMER_DASHBOARD_URL = os.environ.get('FARMER_DASHBOARD_URL', '/dashboard/')
+
+# Phone verification
+PHONE_VERIFICATION_DEV_MODE = (
+    os.environ.get('PHONE_VERIFICATION_DEV_MODE', '1' if DEBUG else '0') == '1'
+)
+PHONE_VERIFICATION_CODE_TTL = int(os.environ.get('PHONE_VERIFICATION_CODE_TTL', '300'))
+PHONE_VERIFICATION_MAX_ATTEMPTS = int(os.environ.get('PHONE_VERIFICATION_MAX_ATTEMPTS', '5'))
+PHONE_VERIFICATION_RESEND_SECONDS = int(os.environ.get('PHONE_VERIFICATION_RESEND_SECONDS', '60'))
+
+FIREBASE_CONFIG = {
+    'apiKey': os.environ.get('FIREBASE_API_KEY', ''),
+    'authDomain': os.environ.get('FIREBASE_AUTH_DOMAIN', ''),
+    'projectId': os.environ.get('FIREBASE_PROJECT_ID', ''),
+    'appId': os.environ.get('FIREBASE_APP_ID', ''),
+    'messagingSenderId': os.environ.get('FIREBASE_MESSAGING_SENDER_ID', ''),
+    'storageBucket': os.environ.get('FIREBASE_STORAGE_BUCKET', ''),
+}
+
+DEFAULT_FROM_EMAIL = 'Yieldary AI <no-reply@yieldary.ai>'
+
+# CORS / CSRF (for Vite frontend)
+# (CORS_ALLOW_CREDENTIALS already set above)
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]

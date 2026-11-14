@@ -1,0 +1,31 @@
+{% extends 'Farmer/base_auth.html' %}
+
+{% block title %}{{ title }} · Yieldary AI{% endblock %}
+
+{% block content %}
+<div class="glass rounded-3xl border border-white/10 p-6 shadow-2xl shadow-black/40 sm:p-8">
+  <p class="font-data text-[10px] uppercase tracking-[0.24em] text-lime">Yieldary AI</p>
+  <h1 class="mt-2 font-display text-3xl font-semibold tracking-tight text-white">{{ heading }}</h1>
+  <p class="mt-4 text-sm leading-6 text-slate-400">{{ summary }}</p>
+
+  <div class="mt-6 space-y-4 text-sm leading-6 text-slate-400">
+    <p>
+      Your account is personal. Keep your password private and tell us promptly if
+      you believe someone else has accessed it.
+    </p>
+    <p>
+      Farm data you provide — place, coordinates, area, crops and contact details —
+      is used to generate advisories and populate your dashboard. We do not sell
+      personal data.
+    </p>
+    <p>
+      This page is a working summary for the current build. A full legal review
+      should be completed before a public production launch.
+    </p>
+  </div>
+
+  <a href="{% url 'farmer:signup' %}" class="mt-7 inline-flex rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-xs font-medium text-slate-200 transition hover:border-lime/30 hover:text-white">
+    Back to signup
+  </a>
+</div>
+{% endblock %}

@@ -41,7 +41,8 @@ import requests
 
 try:
     from rest_framework import status
-    from rest_framework.decorators import api_view
+    from rest_framework.decorators import api_view, permission_classes
+    from rest_framework.permissions import AllowAny
     from rest_framework.request import Request
     from rest_framework.response import Response
 except ImportError:  # Graceful fallback for standalone non-Django test environments
@@ -2239,6 +2240,7 @@ def get_vulnerability_stress_timeseries(request: Request, farm_id: str) -> Respo
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def search_osm_location(request: Request) -> Response:
     """
     GET /api/location/search/?q=<query>&limit=5
@@ -2263,6 +2265,7 @@ def search_osm_location(request: Request) -> Response:
 
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def reverse_geocode_osm(request: Request) -> Response:
     """
     GET /api/location/reverse/?lat=<lat>&lon=<lon>

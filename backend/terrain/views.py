@@ -14,13 +14,46 @@ from terrain.utils import build_bounding_box_polygon
 logger = logging.getLogger(__name__)
 
 
+
+def _fallback_terrain_report(profile, reason: str) -> dict:
+    """Return a safe placeholder report when GEE cannot be reached."""
+    from datetime import date as _date
+
+    today = _date.today().isoformat()
+    return {
+        'score': 0,
+        'erosion_risk_score': 0,
+        'raw_slope_degrees': 0.0,
+        'raw_rainfall_mm': 0.0,
+        'tree_cover_pct': 0.0,
+        'exposed_cover_pct': 0.0,
+        'canopy_height_m': 0.0,
+        'canopy_status': 'Unavailable',
+        'dynamic_description': (
+            'Terrain & soil analysis is unavailable because Google Earth Engine '
+            'credentials are not configured on this server.'
+        ),
+        'soil_type': 'Unknown',
+        'location_name': profile.location_name,
+        'analyzed_from': today,
+        'analyzed_to': today,
+        'date_range': f'{today} to {today}',
+        'cached': False,
+    }
+
+
 def compute_and_save_farmer_terrain(profile: FarmerProfile) -> dict:
     """Run Module 2 calculate_erosion_risk using the farmer's saved lat/lon and persist it."""
     lat = float(profile.latitude)
     lon = float(profile.longitude)
     polygon = build_bounding_box_polygon(lat, lon)
 
-    gee_result = calculate_erosion_risk(polygon)
+    try:
+        gee_result = calculate_erosion_risk(polygon)
+    except GEEComputationError as exc:
+        logger.warning('Terrain GEE unavailable, returning fallback: %s', exc)
+        return _fallback_terrain_report(profile, str(exc))
+
     date_range = f"{gee_result['analyzed_from']} to {gee_result['analyzed_to']}"
 
     report_payload = {

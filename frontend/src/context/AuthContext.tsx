@@ -4,10 +4,9 @@ import {
   fetchFarmerProfileApi,
   loginFarmerApi,
   REFRESH_STORAGE_KEY,
-  registerFarmerApi,
+  signupFarmerApi,
   TOKEN_STORAGE_KEY,
 } from '../services/api';
-import { geocodeLocationWithOSM } from '../services/geocoding';
 import type { FarmerProfile } from '../types/farmer';
 
 export type AuthStage = 'idle' | 'geocoding' | 'submitting' | 'authenticating';
@@ -19,7 +18,23 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (
-    params: { email: string; password: string; fullName: string; farmLocation: string },
+    params: {
+      userType: string;
+      name: string;
+      email: string;
+      phoneNumber: string;
+      placeName: string;
+      latitude: string;
+      longitude: string;
+      farmAreaAcres: string;
+      cropsGrown: string;
+      gender: string;
+      age: string;
+      preferredLanguage: string;
+      password: string;
+      confirmPassword: string;
+      termsAccepted: boolean;
+    },
     onStage?: (stage: AuthStage) => void,
   ) => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -109,26 +124,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = useCallback(
     async (
-      params: { email: string; password: string; fullName: string; farmLocation: string },
+      params: {
+        userType: string;
+        name: string;
+        email: string;
+        phoneNumber: string;
+        placeName: string;
+        latitude: string;
+        longitude: string;
+        farmAreaAcres: string;
+        cropsGrown: string;
+        gender: string;
+        age: string;
+        preferredLanguage: string;
+        password: string;
+        confirmPassword: string;
+        termsAccepted: boolean;
+      },
       onStage?: (stage: AuthStage) => void,
     ) => {
-      onStage?.('geocoding');
-      const geo = await geocodeLocationWithOSM(params.farmLocation);
-
       onStage?.('submitting');
       try {
-        const res = await registerFarmerApi({
+        const res = await signupFarmerApi({
+          user_type: params.userType,
+          name: params.name.trim(),
           email: params.email.trim().toLowerCase(),
+          phone_number: params.phoneNumber.trim(),
+          place_name: params.placeName.trim(),
+          latitude: params.latitude,
+          longitude: params.longitude,
+          farm_area_acres: params.farmAreaAcres,
+          crops_grown: params.cropsGrown,
+          gender: params.gender,
+          age: params.age,
+          preferred_language: params.preferredLanguage,
           password: params.password,
-          full_name: params.fullName.trim(),
-          location_name: params.farmLocation.trim(),
-          latitude: geo.latitude,
-          longitude: geo.longitude,
+          confirm_password: params.confirmPassword,
+          terms_accepted: params.termsAccepted,
         });
+        if (!res.ok || !res.access || !res.refresh) {
+          const msg = res.errors
+            ? Object.values(res.errors).flat()[0] || res.error || 'Registration failed.'
+            : res.error || 'Registration failed.';
+          throw new Error(msg);
+        }
         localStorage.setItem(TOKEN_STORAGE_KEY, res.access);
         localStorage.setItem(REFRESH_STORAGE_KEY, res.refresh);
         setAccessToken(res.access);
-        setProfile(res.profile);
+        const userProfile = await fetchFarmerProfileApi();
+        setProfile(userProfile);
       } catch (err) {
         throw new Error(extractApiError(err, 'Registration failed. Please check your inputs.'));
       } finally {
