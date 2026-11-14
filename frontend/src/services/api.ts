@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { FarmerProfile, RegisterPayload } from '../types/farmer';
+import type { FarmerProfile, RegisterPayload, TelemetryReport } from '../types/farmer';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
 
@@ -49,5 +49,13 @@ export async function loginFarmerApi(email: string, password: string): Promise<T
 
 export async function fetchFarmerProfileApi(): Promise<FarmerProfile> {
   const { data } = await apiClient.get<FarmerProfile>('/profile/');
+  return data;
+}
+
+export async function fetchFarmerTelemetryApi(refresh = false): Promise<TelemetryReport> {
+  const { data } = await apiClient.get<TelemetryReport>('/telemetry/', {
+    params: refresh ? { refresh: '1' } : undefined,
+    timeout: 90000,
+  });
   return data;
 }

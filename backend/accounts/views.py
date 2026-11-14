@@ -1,3 +1,7 @@
+import logging
+import threading
+
+from django.db import transaction
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -6,12 +10,24 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from telemetry.views import compute_and_save_farmer_telemetry
+
 from .models import FarmerProfile
 from .serializers import (
     EmailTokenObtainPairSerializer,
     FarmerProfileSerializer,
     RegisterSerializer,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _precompute_telemetry_async(profile_id: int) -> None:
+    try:
+        profile = FarmerProfile.objects.get(pk=profile_id)
+        compute_and_save_farmer_telemetry(profile)
+    except Exception:
+        logger.exception('Background Module 1 telemetry precomputation failed for farmer %s', profile_id)
 
 
 class RegisterView(APIView):
@@ -23,6 +39,14 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         profile = serializer.save()
+
+        transaction.on_commit(
+            lambda: threading.Thread(
+                target=_precompute_telemetry_async,
+                args=(profile.pk,),
+                daemon=True,
+            ).start()
+        )
 
         refresh = RefreshToken.for_user(profile.user)
         return Response(
