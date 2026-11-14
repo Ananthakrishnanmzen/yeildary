@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'accounts.apps.AccountsConfig',
     'telemetry.apps.TelemetryConfig',
+    'terrain.apps.TerrainConfig',
 ]
 
 MIDDLEWARE = [
@@ -122,7 +123,11 @@ CORS_ALLOWED_ORIGINS = [
     'http://127.0.0.1:3000',
 ]
 
-# Google Earth Engine credentials for Module 1 (Telemetry Engine)
+# Google Earth Engine credentials for Module 1 & Module 2
 os.environ.setdefault('GEE_SERVICE_ACCOUNT', 'Gee-backend@prepmately.iam.gserviceaccount.com')
 os.environ.setdefault('GEE_PRIVATE_KEY_PATH', str(BASE_DIR / 'gee-key.json'))
 os.environ.setdefault('GEE_PROJECT_ID', 'prepmately')
+GEE_SERVICE_ACCOUNT_KEY_PATH = os.environ.get(
+    'GEE_SERVICE_ACCOUNT_KEY_PATH',
+    str(BASE_DIR / 'gee-key.json'),
+)

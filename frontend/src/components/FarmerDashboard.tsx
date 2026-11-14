@@ -2,24 +2,28 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
+  CloudRain,
   Compass,
   Droplets,
   ExternalLink,
   Flame,
+  Layers,
   Leaf,
   Loader2,
   LogOut,
   Mail,
   MapPin,
+  Mountain,
   RefreshCw,
   ShieldCheck,
   Sprout,
+  Trees,
   User,
   Wind,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { fetchFarmerTelemetryApi } from '../services/api';
-import type { TelemetryReport } from '../types/farmer';
+import { fetchFarmerTelemetryApi, fetchFarmerTerrainApi } from '../services/api';
+import type { TelemetryReport, TerrainReport } from '../types/farmer';
 
 export default function FarmerDashboard() {
   const { profile, refreshProfile, logout } = useAuth();
@@ -28,11 +32,16 @@ export default function FarmerDashboard() {
   const [telemetryLoading, setTelemetryLoading] = useState(true);
   const [telemetryError, setTelemetryError] = useState<string | null>(null);
 
+  const [terrain, setTerrain] = useState<TerrainReport | null>(null);
+  const [terrainLoading, setTerrainLoading] = useState(true);
+  const [terrainError, setTerrainError] = useState<string | null>(null);
+
   const loadTelemetry = useCallback(async (forceRefresh = false) => {
     setTelemetryLoading(true);
     setTelemetryError(null);
     try {
       const data = await fetchFarmerTelemetryApi(forceRefresh);
+      console.log('Module 1 Telemetry JSON:', data);
       setTelemetry(data);
     } catch (err) {
       setTelemetryError(
@@ -42,6 +51,23 @@ export default function FarmerDashboard() {
       );
     } finally {
       setTelemetryLoading(false);
+    }
+  }, []);
+
+  const loadTerrain = useCallback(async (forceRefresh = false) => {
+    setTerrainLoading(true);
+    setTerrainError(null);
+    try {
+      const data = await fetchFarmerTerrainApi(forceRefresh);
+      setTerrain(data);
+    } catch (err) {
+      setTerrainError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to calculate Module 2 terrain & soil health report.',
+      );
+    } finally {
+      setTerrainLoading(false);
     }
   }, []);
 
@@ -56,10 +82,11 @@ export default function FarmerDashboard() {
         if (active) setIsRefreshing(false);
       });
     loadTelemetry(false);
+    loadTerrain(false);
     return () => {
       active = false;
     };
-  }, [refreshProfile, loadTelemetry]);
+  }, [refreshProfile, loadTelemetry, loadTerrain]);
 
   if (!profile) {
     return null;
@@ -143,16 +170,17 @@ export default function FarmerDashboard() {
                 setIsRefreshing(true);
                 refreshProfile().finally(() => setIsRefreshing(false));
                 loadTelemetry(true);
+                loadTerrain(true);
               }}
-              disabled={isRefreshing || telemetryLoading}
+              disabled={isRefreshing || telemetryLoading || terrainLoading}
               className="inline-flex items-center gap-2 rounded-xl bg-[#0E1015]/80 border border-white/10 hover:border-[#38BDF8]/40 px-3.5 py-2 text-xs font-semibold text-[#38BDF8] transition-colors cursor-pointer disabled:opacity-60"
             >
-              {isRefreshing || telemetryLoading ? (
+              {isRefreshing || telemetryLoading || terrainLoading ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <RefreshCw className="w-3.5 h-3.5" />
               )}
-              <span>Recalculate Module 1</span>
+              <span>Recalculate Modules</span>
             </button>
           </div>
         </div>
@@ -461,7 +489,10 @@ export default function FarmerDashboard() {
                               {row.water_stress_index}
                             </td>
                             <td className="px-6 py-3 font-mono">
-                              {row.soil_moisture_m3m3 ?? '—'}
+                              {(() => {
+                                const sm = row.sm_rootzone_m3m3 ?? row.soil_moisture_m3m3;
+                                return sm !== null && sm !== undefined ? Number(sm).toFixed(4) : 'N/A';
+                              })()}
                             </td>
                             <td className="px-6 py-3 font-mono">{row.et_mm}</td>
                             <td className="px-6 py-3 font-mono">{row.rainfall_mm}</td>
@@ -484,6 +515,120 @@ export default function FarmerDashboard() {
                 </div>
               )}
             </>
+          )}
+        </section>
+
+        {/* Row 3: Module 2 Terrain & Soil Health Layer */}
+        <section className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Mountain className="w-5 h-5 text-[#FACC15]" />
+                Module 2: Terrain &amp; Soil Health Layer
+              </h2>
+              {terrain && (
+                <p className="text-xs text-slate-400 mt-0.5">
+                  GEE SRTM + IMERG + WorldCover + NASA GEDI + OpenLandMap &bull; Window:{' '}
+                  {terrain.date_range}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {terrainLoading && !terrain && (
+            <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-10 flex flex-col items-center justify-center gap-3 text-slate-300">
+              <Loader2 className="w-7 h-7 animate-spin text-[#FACC15]" />
+              <p className="text-sm font-medium">
+                Calculating Module 2 GEE erosion risk &amp; soil texture for (
+                {profile.latitude.toFixed(4)}, {profile.longitude.toFixed(4)})...
+              </p>
+            </div>
+          )}
+
+          {terrainError && (
+            <div className="rounded-2xl border border-[#FACC15]/30 bg-[#FACC15]/10 p-4 flex items-start gap-3 text-sm text-[#FACC15]">
+              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Module 2 Terrain Error</p>
+                <p className="text-xs opacity-90 mt-0.5">{terrainError}</p>
+              </div>
+            </div>
+          )}
+
+          {terrain && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Erosion Risk Score
+                    </span>
+                    <Mountain className="w-4 h-4 text-[#FACC15]" />
+                  </div>
+                  <p className="mt-3 text-2xl font-bold font-mono text-[#FACC15]">
+                    {terrain.erosion_risk_score} / 100
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Max Slope:{' '}
+                    <span className="text-white font-mono font-semibold">
+                      {terrain.raw_slope_degrees}&deg;
+                    </span>
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      USDA Soil Texture
+                    </span>
+                    <Layers className="w-4 h-4 text-[#84CC16]" />
+                  </div>
+                  <p className="mt-3 text-2xl font-bold text-[#84CC16]">{terrain.soil_type}</p>
+                  <p className="text-xs text-slate-400 mt-1">OpenLandMap USDA-TT</p>
+                </div>
+
+                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      Canopy &amp; Tree Cover
+                    </span>
+                    <Trees className="w-4 h-4 text-[#84CC16]" />
+                  </div>
+                  <p className="mt-3 text-2xl font-bold font-mono text-white">
+                    {terrain.tree_cover_pct}%
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {terrain.canopy_status} &bull; Exposed:{' '}
+                    <span className="text-white font-mono">{terrain.exposed_cover_pct}%</span>
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      IMERG Rainfall
+                    </span>
+                    <CloudRain className="w-4 h-4 text-[#38BDF8]" />
+                  </div>
+                  <p className="mt-3 text-2xl font-bold font-mono text-[#38BDF8]">
+                    {terrain.raw_rainfall_mm} mm/mo
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Canopy Height:{' '}
+                    <span className="text-white font-mono">{terrain.canopy_height_m}m</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl bg-[#0E1015]/75 backdrop-blur-xl border border-white/10 p-5">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Terrain &amp; Canopy Assessment
+                </p>
+                <p className="mt-1.5 text-sm text-slate-200 leading-relaxed">
+                  {terrain.dynamic_description}
+                </p>
+              </div>
+            </div>
           )}
         </section>
       </main>

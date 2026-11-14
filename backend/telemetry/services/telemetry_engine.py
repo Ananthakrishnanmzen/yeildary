@@ -1379,9 +1379,20 @@ class GEEDataExtractor:
 
         lat, lon = compute_polygon_centroid(polygon_coords)
         geom = ee.Geometry.Polygon(polygon_coords)
+        # Coarse-resolution SMAP (10-36 km) needs a 15 km buffer to avoid masked/coastal pixels
+        smap_geom = ee.Geometry.Point([lon, lat]).buffer(15000).bounds()
 
         def reduce_mean(image: Any, scale: int) -> Any:
             return image.reduceRegion(reducer=ee.Reducer.mean(), geometry=geom, scale=scale, maxPixels=1e8)
+
+        def reduce_smap_mean(image: Any) -> Any:
+            return image.reduceRegion(
+                reducer=ee.Reducer.mean(),
+                geometry=smap_geom,
+                scale=10000,
+                maxPixels=1e9,
+                bestEffort=True,
+            )
 
         # --- 1. Sentinel-2 (10m) + Cloud Score+ ---
         s2_col = (
@@ -1424,8 +1435,13 @@ class GEEDataExtractor:
         )
         smap_col = (
             ee.ImageCollection(self.config.GEE_SMAP_L4)
-            .filterBounds(geom).filterDate(s_date, e_date)
+            .filterBounds(smap_geom).filterDate(s_date, e_date)
             .select(["sm_surface", "sm_rootzone", "land_evapotranspiration_flux"])
+        )
+        gldas_sm_col = (
+            ee.ImageCollection(self.config.GEE_GLDAS_3HOURLY)
+            .filterBounds(smap_geom).filterDate(s_date, e_date)
+            .select(["SoilMoi0_10cm_inst", "SoilMoi10_40cm_inst"])
         )
         gpm_col = (
             ee.ImageCollection(self.config.GEE_GPM_IMERG)
@@ -1448,7 +1464,8 @@ class GEEDataExtractor:
 
             s2_m = reduce_mean(s2_col.filterDate(m_start, m_end).median(), 10)
             ls_m = reduce_mean(landsat_col.filterDate(m_start, m_end).median(), 30)
-            smap_m = reduce_mean(smap_col.filterDate(m_start, m_end).mean(), 9000)
+            smap_m = reduce_smap_mean(smap_col.filterDate(m_start, m_end).mean())
+            gldas_m = reduce_smap_mean(gldas_sm_col.filterDate(m_start, m_end).mean())
             gpm_m = reduce_mean(gpm_col.filterDate(m_start, m_end).sum(), 11132)
 
             et_img, et_scale, _ = et_strategy.build_monthly_et_expression(ee, geom, m_start, m_end, self.config)
@@ -1469,6 +1486,8 @@ class GEEDataExtractor:
                     "landsat_ndvi": ls_m.get("landsat_ndvi"),
                     "sm_surface": smap_m.get("sm_surface"),
                     "sm_rootzone": smap_m.get("sm_rootzone"),
+                    "gldas_sm_surface": gldas_m.get("SoilMoi0_10cm_inst"),
+                    "gldas_sm_rootzone": gldas_m.get("SoilMoi10_40cm_inst"),
                     "smap_et_flux": smap_m.get("land_evapotranspiration_flux"),
                     "rainfall_mm": gpm_m.get("gpm_rainfall_mm"),
                     "et_mm": et_m.get("et_mm"),
@@ -1487,13 +1506,13 @@ class GEEDataExtractor:
             ee, geom, sub_start, sub_end, self.config
         )
 
-        return ee.Dictionary({
+        raw_result = ee.Dictionary({
             "window": window,
             "summary": {
                 "sentinel2": reduce_mean(s2_col.median(), 10),
                 "landsat": reduce_mean(landsat_col.median(), 30),
                 "modis": reduce_mean(modis_ndvi, 250),
-                "smap": reduce_mean(smap_col.mean(), 9000),
+                "smap": reduce_smap_mean(smap_col.mean()),
                 "srtm": reduce_mean(srtm, 30),
                 "gpm": reduce_mean(gpm_col.sum().rename("total_precip_mm"), 11132),
                 "era5_temp": reduce_mean(era5_col.select("temperature_2m").mean().subtract(273.15).rename("era5_temp_c"), 11132),
@@ -1502,6 +1521,7 @@ class GEEDataExtractor:
             "monthly_bundle": monthly_fc.toList(monthly_fc.size()).map(
                 lambda f: ee.Feature(f).toDictionary([
                     "date", "s2_ndvi", "landsat_ndvi", "sm_surface", "sm_rootzone",
+                    "gldas_sm_surface", "gldas_sm_rootzone",
                     "smap_et_flux", "rainfall_mm", "et_mm", "pet_mm", "era5_et_mm",
                     "era5_mean_temp_c", "era5_max_temp_c", "era5_hot_days",
                 ])
@@ -1509,6 +1529,20 @@ class GEEDataExtractor:
             "ldas_subdaily_microclimate": ldas_series,
             "assimilation_model": ldas_model,
         }).getInfo()
+
+        smap_summary = raw_result.get("summary", {}).get("smap")
+        logger.info("Raw GEE SMAP summary for (%.4f, %.4f): %s", lat, lon, smap_summary)
+        print(f"[GEE SMAP RAW] ({lat:.4f}, {lon:.4f}) summary={smap_summary}")
+
+        for row in raw_result.get("monthly_bundle", []):
+            if row.get("sm_rootzone") is None and row.get("gldas_sm_rootzone") is not None:
+                # Convert GLDAS 10-40 cm soil moisture (kg/m^2 = mm over 300mm) to volumetric m^3/m^3
+                row["sm_rootzone"] = round(float(row["gldas_sm_rootzone"]) / 300.0, 4)
+            if row.get("sm_surface") is None and row.get("gldas_sm_surface") is not None:
+                # Convert GLDAS 0-10 cm soil moisture (kg/m^2 = mm over 100mm) to volumetric m^3/m^3
+                row["sm_surface"] = round(float(row["gldas_sm_surface"]) / 100.0, 4)
+
+        return raw_result
 
 
 # ==============================================================================

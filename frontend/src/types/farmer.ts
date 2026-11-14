@@ -38,7 +38,9 @@ export interface LocationRating {
 
 export interface WaterStressSeriesItem {
   date: string;
-  soil_moisture_m3m3: number | null;
+  sm_rootzone_m3m3: number | null;
+  sm_surface_m3m3?: number | null;
+  soil_moisture_m3m3?: number | null;
   et_mm: number;
   rainfall_mm: number;
   water_stress_index: number;
@@ -90,4 +92,22 @@ export interface TelemetryReport {
       };
     };
   };
+}
+
+export interface TerrainReport {
+  cached?: boolean;
+  score: number;
+  erosion_risk_score: number;
+  raw_slope_degrees: number;
+  raw_rainfall_mm: number;
+  tree_cover_pct: number;
+  exposed_cover_pct: number;
+  canopy_height_m: number;
+  canopy_status: string;
+  dynamic_description: string;
+  soil_type: string;
+  location_name: string;
+  analyzed_from: string;
+  analyzed_to: string;
+  date_range: string;
 }

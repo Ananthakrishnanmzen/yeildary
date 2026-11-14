@@ -11,6 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from telemetry.views import compute_and_save_farmer_telemetry
+from terrain.views import compute_and_save_farmer_terrain
 
 from .models import FarmerProfile
 from .serializers import (
@@ -22,12 +23,19 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-def _precompute_telemetry_async(profile_id: int) -> None:
+def _precompute_modules_async(profile_id: int) -> None:
     try:
         profile = FarmerProfile.objects.get(pk=profile_id)
+    except FarmerProfile.DoesNotExist:
+        return
+    try:
         compute_and_save_farmer_telemetry(profile)
     except Exception:
         logger.exception('Background Module 1 telemetry precomputation failed for farmer %s', profile_id)
+    try:
+        compute_and_save_farmer_terrain(profile)
+    except Exception:
+        logger.exception('Background Module 2 terrain precomputation failed for farmer %s', profile_id)
 
 
 class RegisterView(APIView):
@@ -42,7 +50,7 @@ class RegisterView(APIView):
 
         transaction.on_commit(
             lambda: threading.Thread(
-                target=_precompute_telemetry_async,
+                target=_precompute_modules_async,
                 args=(profile.pk,),
                 daemon=True,
             ).start()

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { FarmerProfile, RegisterPayload, TelemetryReport } from '../types/farmer';
+import type { FarmerProfile, RegisterPayload, TelemetryReport, TerrainReport } from '../types/farmer';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api';
 
@@ -54,6 +54,14 @@ export async function fetchFarmerProfileApi(): Promise<FarmerProfile> {
 
 export async function fetchFarmerTelemetryApi(refresh = false): Promise<TelemetryReport> {
   const { data } = await apiClient.get<TelemetryReport>('/telemetry/', {
+    params: refresh ? { refresh: '1' } : undefined,
+    timeout: 90000,
+  });
+  return data;
+}
+
+export async function fetchFarmerTerrainApi(refresh = false): Promise<TerrainReport> {
+  const { data } = await apiClient.get<TerrainReport>('/terrain/', {
     params: refresh ? { refresh: '1' } : undefined,
     timeout: 90000,
   });
