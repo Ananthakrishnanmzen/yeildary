@@ -1,0 +1,86 @@
+{% extends 'Farmer/base_auth.html' %}
+
+{% block title %}Login · Yieldary AI{% endblock %}
+
+{% block content %}
+<div class="glass rounded-3xl border border-white/10 p-6 shadow-2xl shadow-black/40 sm:p-8">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <p class="font-data text-[10px] uppercase tracking-[0.24em] text-lime">Login</p>
+      <h1 class="mt-2 font-display text-3xl font-semibold tracking-tight text-white">Welcome back</h1>
+      <p class="mt-2 text-sm text-slate-400">Sign in to open your farm dashboard.</p>
+    </div>
+    <span class="mt-1 hidden rounded-full border border-lime/25 bg-lime/10 px-3 py-1 font-data text-[9px] uppercase tracking-[0.18em] text-lime sm:inline-flex">
+      Secure
+    </span>
+  </div>
+
+  {% if form.non_field_errors %}
+    <div class="mt-5 rounded-xl border border-rose/30 bg-rose/10 px-4 py-3 text-sm text-rose" role="alert">
+      {{ form.non_field_errors }}
+    </div>
+  {% endif %}
+
+  <form method="post" action="{% url 'farmer:login' %}" class="mt-7 space-y-5" novalidate>
+    {% csrf_token %}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}" />{% endif %}
+
+    <div>
+      <label for="{{ form.email.id_for_label }}" class="mb-2 block text-xs font-medium text-slate-300">Email or username</label>
+      {{ form.email }}
+      {{ form.email.errors }}
+    </div>
+
+    <div>
+      <div class="mb-2 flex items-center justify-between gap-3">
+        <label for="{{ form.password.id_for_label }}" class="block text-xs font-medium text-slate-300">Password</label>
+        <a href="{% url 'farmer:password_reset' %}" class="text-xs font-medium text-slate-400 transition hover:text-lime">Forgot password?</a>
+      </div>
+      <div class="relative">
+        {{ form.password }}
+        <button type="button" data-toggle-password="id_password"
+                class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-md p-1 text-slate-500 transition hover:text-lime"
+                aria-label="Show password">
+          <svg class="eye-closed h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 3l18 18"/>
+            <path d="M10.58 10.58A2 2 0 0012 14a2 2 0 001.42-.58"/>
+            <path d="M9.88 5.09A9.77 9.77 0 0112 5c5 0 9.27 3.11 10.5 7-.42 1.33-1.15 2.53-2.12 3.54"/>
+            <path d="M6.61 6.61C4.62 7.9 3.1 9.73 2.5 12c.64 2.03 2.05 3.76 3.87 5.06"/>
+          </svg>
+          <svg class="eye-open hidden h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2.5 12C3.73 8.11 8 5 12 5s8.27 3.11 9.5 7c-1.23 3.89-5.5 7-9.5 7S3.73 15.89 2.5 12z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+      {{ form.password.errors }}
+    </div>
+
+    <label class="flex cursor-pointer items-center gap-2.5 text-xs text-slate-400">
+      {{ form.remember_me }}
+      <span>Keep me signed in on this device</span>
+    </label>
+
+    <button type="submit"
+            class="group flex w-full items-center justify-center gap-2 rounded-xl border border-lime/50 bg-lime/15 px-4 py-3 text-sm font-semibold text-lime transition hover:border-lime/70 hover:bg-lime/25 focus:outline-none focus:ring-2 focus:ring-lime/40">
+      Sign in to dashboard
+      <svg viewBox="0 0 20 20" fill="none" class="h-4 w-4 transition group-hover:translate-x-0.5" aria-hidden="true">
+        <path d="M4 10h12m0 0-4-4m4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </form>
+
+  <div class="mt-7 flex items-center gap-3">
+    <span class="h-px flex-1 bg-white/10"></span>
+    <span class="font-data text-[9px] uppercase tracking-[0.2em] text-slate-600">New here?</span>
+    <span class="h-px flex-1 bg-white/10"></span>
+  </div>
+
+  <a href="{% url 'farmer:signup' %}"
+     class="mt-5 flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-medium text-slate-200 transition hover:border-lime/30 hover:bg-lime/[0.06] hover:text-white">
+    Create a farmer account
+  </a>
+
+
+</div>
+{% endblock %}
