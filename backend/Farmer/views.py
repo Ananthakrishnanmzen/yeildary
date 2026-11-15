@@ -18,6 +18,7 @@ from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.core.mail import send_mail
 from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -453,12 +454,17 @@ def email_send_code(request):
     except PhoneVerificationError as exc:
         return JsonResponse({'ok': False, 'error': exc.message}, status=exc.status)
 
+    plain_message = "Your verification code is: " + code + chr(10) + "It expires in 5 minutes." + chr(10) + chr(10) + "If you did not request this, you can safely ignore this message."
+    html_message = render_to_string(
+        'Farmer/email_verification.html', {'code': code, 'email': email}
+    )
     try:
         send_mail(
             subject='Yieldary AI verification code',
-            message=f'Your verification code is: {code}\nIt expires in 5 minutes.',
+            message=plain_message,
             from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@yieldary.ai'),
             recipient_list=[email],
+            html_message=html_message,
             fail_silently=True,
         )
     except Exception:
