@@ -43,3 +43,26 @@ class FarmerAuthFlowTests(APITestCase):
         self.assertEqual(profile_res.data['location_name'], 'Kumily, Kerala')
         self.assertAlmostEqual(profile_res.data['latitude'], 9.6031, places=4)
         self.assertAlmostEqual(profile_res.data['longitude'], 77.1615, places=4)
+
+
+class HealthCheckTests(APITestCase):
+    def test_health_reports_ok_when_database_is_reachable(self):
+        response = self.client.get(reverse('accounts:health'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {'ok': True, 'database': 'ok'})
+
+    def test_health_reports_503_when_database_is_unreachable(self):
+        from unittest import mock
+
+        from django.db import OperationalError
+
+        with mock.patch(
+            'accounts.views.connection.cursor',
+            side_effect=OperationalError('could not connect to server'),
+        ):
+            with self.assertLogs('accounts.views', level='ERROR'):
+                response = self.client.get(reverse('accounts:health'))
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertFalse(response.data['ok'])
+        self.assertIn('migrate', response.data['error'])

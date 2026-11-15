@@ -216,6 +216,15 @@ _LOCAL_ORIGINS = [
     'http://127.0.0.1:3000',
 ]
 
+# The live React (Vite) site, deployed on Vercel. The apex domain redirects to
+# `www`, but both are listed so CORS keeps working whichever one is loaded.
+# These are trusted by default so a missing FRONTEND_URL on Render cannot
+# silently break the deployed frontend with a browser "Network Error".
+_PRODUCTION_FRONTEND_ORIGINS = [
+    'https://yieldary.us',
+    'https://www.yieldary.us',
+]
+
 
 def _split_origins(value: str) -> list[str]:
     """Parse a comma-separated list of origins, dropping blanks and trailing slashes."""
@@ -242,12 +251,14 @@ def _unique(items: list[str]) -> list[str]:
 
 CORS_ALLOWED_ORIGINS = _unique(
     _LOCAL_ORIGINS
+    + _PRODUCTION_FRONTEND_ORIGINS
     + ([FRONTEND_URL] if FRONTEND_URL else [])
     + _EXTRA_CORS_ORIGINS
 )
 
 CSRF_TRUSTED_ORIGINS = _unique(
     _LOCAL_ORIGINS
+    + _PRODUCTION_FRONTEND_ORIGINS
     + ([FRONTEND_URL] if FRONTEND_URL else [])
     + _EXTRA_CORS_ORIGINS
     + _EXTRA_CSRF_ORIGINS
@@ -261,6 +272,11 @@ if RENDER_EXTERNAL_HOSTNAME:
 
 CORS_ALLOWED_ORIGINS = _unique(CORS_ALLOWED_ORIGINS)
 CSRF_TRUSTED_ORIGINS = _unique(CSRF_TRUSTED_ORIGINS)
+
+if DEBUG:
+    # Accept any localhost/127.0.0.1 port in development so `npm run dev` keeps
+    # working when Vite falls back to 5174, 5175, ... because 5173 is taken.
+    CORS_ALLOWED_ORIGIN_REGEXES = [r'^http://(localhost|127\.0\.0\.1):\d+$']
 
 # Google Earth Engine credentials for Module 1 & Module 2
 # On Render a Secret File can be mounted at /etc/secrets/gee-key.json.

@@ -13,7 +13,7 @@ import type {
  * API base URL resolution.
  *
  * `VITE_API_BASE_URL` is the canonical variable and should include the `/api` suffix,
- * e.g. `https://yieldary-backend.onrender.com/api`.
+ * e.g. `https://yeildary.onrender.com/api`.
  *
  * `VITE_API_URL` is also accepted (the name used in Render's docs) and is normalised to
  * always end with `/api`. Without either, requests fall back to the same-origin `/api`

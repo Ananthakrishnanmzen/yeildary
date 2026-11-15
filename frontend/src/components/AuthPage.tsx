@@ -681,9 +681,9 @@ export default function AuthPage() {
                     />
                     <span>
                       I agree to the{' '}
-                      <a href="/terms/" target="_blank" rel="noopener" className="font-medium text-slate-200 underline decoration-white/25 underline-offset-4 transition hover:text-lime-400">Terms of Service</a>
+                      <a href={`${BACKEND_BASE_URL}/terms/`} target="_blank" rel="noopener" className="font-medium text-slate-200 underline decoration-white/25 underline-offset-4 transition hover:text-lime-400">Terms of Service</a>
                       {' '}and{' '}
-                      <a href="/privacy/" target="_blank" rel="noopener" className="font-medium text-slate-200 underline decoration-white/25 underline-offset-4 transition hover:text-lime-400">Privacy Policy</a>.
+                      <a href={`${BACKEND_BASE_URL}/privacy/`} target="_blank" rel="noopener" className="font-medium text-slate-200 underline decoration-white/25 underline-offset-4 transition hover:text-lime-400">Privacy Policy</a>.
                     </span>
                   </label>
                 </section>

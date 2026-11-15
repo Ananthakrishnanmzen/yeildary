@@ -1,7 +1,7 @@
 import logging
 import threading
 
-from django.db import transaction
+from django.db import connection, transaction
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -72,6 +72,38 @@ class EmailTokenObtainPairView(TokenObtainPairView):
     """POST /api/token/ — Issue JWT access and refresh tokens."""
 
     serializer_class = EmailTokenObtainPairSerializer
+
+
+class HealthView(APIView):
+    """GET /api/health/ — Liveness probe that also verifies the database.
+
+    A Render web service with an unmigrated or expired database answers every
+    data-backed request with an opaque 500, which the React app can only report
+    as a generic failure. This endpoint makes that state explicit and is used as
+    the Render health check path.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request: Request) -> Response:
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT 1')
+                cursor.fetchone()
+        except Exception:
+            logger.exception('Database health check failed')
+            return Response(
+                {
+                    'ok': False,
+                    'database': 'unavailable',
+                    'error': 'The database is not reachable or its tables are missing. '
+                    'Run "python manage.py migrate" against this service, and check '
+                    'that DATABASE_URL points to a live database.',
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response({'ok': True, 'database': 'ok'}, status=status.HTTP_200_OK)
 
 
 class ProfileView(APIView):

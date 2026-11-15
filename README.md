@@ -10,6 +10,12 @@ yieldary/
 └── frontend/    # React + TypeScript + Tailwind CSS + Axios
 ```
 
+The frontend talks to the backend through the shared Axios client in
+`frontend/src/services/api.ts`. Locally, `VITE_API_BASE_URL=/api` and Vite proxies
+those requests to `http://127.0.0.1:8000`, so no CORS setup is needed in
+development. In production the two halves are deployed to Vercel and Render —
+see [Deployment](#deployment-vercel-frontend--render-backend).
+
 ## Quick Start
 
 ### 1. Backend (Django)
@@ -34,20 +40,35 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-## Deploying to Render (React + Django as separate services)
+## Deployment (Vercel frontend + Render backend)
 
-`render.yaml` defines two services plus a PostgreSQL database:
+The two halves are deployed separately:
 
-| Service | Type | Root | URL |
-|---|---|---|---|
-| `yieldary-backend` | Python web service | `backend/` | `https://yieldary-backend.onrender.com` |
-| `yieldary-frontend` | Static site (Vite) | `frontend/` | `https://yieldary-frontend.onrender.com` |
+| Part | Host | URL |
+|---|---|---|
+| Backend (Django + DRF) | Render web service (`render.yaml`, root `backend/`) | `https://yeildary.onrender.com` |
+| Frontend (Vite + React) | Vercel, root `frontend/` | `https://www.yieldary.us` |
 
-If the generated URLs differ, update them in **three** places:
+`render.yaml` therefore describes **one** web service plus its PostgreSQL database; the static-site service that used to live there was removed when the frontend moved to Vercel.
 
-1. `render.yaml` → backend env `FRONTEND_URL` and frontend env `VITE_API_BASE_URL`.
-2. `frontend/.env.production` → `VITE_API_BASE_URL` (used for local production builds).
-3. Render dashboard → each service's **Environment** tab.
+Because the two origins are on different registrable domains (`yieldary.us` vs `onrender.com`), every request is cross-site. That means:
+
+- the backend must list the frontend origin in CORS **and** trust it for CSRF,
+- the frontend must call the backend with `withCredentials: true` (it does) and the backend must send `SameSite=None; Secure` cookies (it does on Render), since the signup flow stores email/phone verification state in the Django session.
+
+### Setting the API URL
+
+The frontend calls whatever `VITE_API_BASE_URL` says. Vite inlines it at **build** time and process environment variables take priority over `.env.production`, so it must be set in Vercel, not just in the repo:
+
+| Where | Value |
+|---|---|
+| Vercel → Project → Settings → Environment Variables | `VITE_API_BASE_URL=https://yeildary.onrender.com/api` |
+| `frontend/.env.production` (fallback used by `npm run build`) | `VITE_API_BASE_URL=https://yeildary.onrender.com/api` |
+| Local `frontend/.env` | `VITE_API_BASE_URL=/api` (proxied to `http://127.0.0.1:8000` by `vite.config.ts`) |
+
+After changing it, **redeploy** the Vercel project — an existing deployment keeps the old URL baked into its bundle. Frontend variables are public; never put secrets in them.
+
+A wrong host here is what produces the browser's bare `Network Error`: the preflight `OPTIONS` request never gets a CORS header, so Axios reports a network failure with no HTTP status.
 
 ### Backend (Django) settings
 
@@ -68,25 +89,29 @@ If the generated URLs differ, update them in **three** places:
 
 Notes:
 
+- `https://yieldary.us` and `https://www.yieldary.us` are trusted by default, so a missing `FRONTEND_URL` cannot silently break the live site.
 - `corsheaders` is installed and `CorsMiddleware` is the first middleware, so preflight `OPTIONS` requests are answered before any auth checks.
 - `CORS_ALLOW_CREDENTIALS` is enabled and the frontend's `apiClient` sends `withCredentials: true`, because the email/phone verification flow keeps its state in the Django session.
 - API authentication uses Simple JWT (Bearer tokens in `localStorage`), not session cookies, so `CSRF_TRUSTED_ORIGINS` mainly matters for the Django admin and server-rendered pages. It is still populated for completeness.
 - Django hostnames must not include a scheme; origins must include one (`https://…`).
-- `onrender.com` is on the Public Suffix List, so the two `*.onrender.com` services are different **sites**. On Render the session/CSRF cookies therefore use `SameSite=None; Secure` (see `DJANGO_SESSION_COOKIE_SAMESITE`). Browsers that block third-party cookies (notably Safari/iOS) can still reject them. For a fully robust setup, put both services on custom domains sharing a registrable domain (e.g. `app.example.com` and `api.example.com`) and switch the SameSite values back to `Lax`.
-- Verification emails are sent through SMTP; if the credentials are missing, `/api/email/send-code/` returns a `503` instead of silently claiming a code was sent.
+- Browsers that block third-party cookies (notably Safari/iOS) can still reject the cross-site session cookie. For a fully robust setup, serve both halves from one registrable domain (e.g. `app.yieldary.us` and `api.yieldary.us`) and switch the SameSite values back to `Lax`.
+- Verification emails are sent through SMTP; if sending fails, `/api/email/send-code/` returns a `503` instead of silently claiming a code was sent.
 
-### Frontend (React) settings
+### Health check
 
-The API base URL is resolved in `frontend/src/services/api.ts` from `VITE_API_BASE_URL` (canonical, includes the `/api` suffix) or `VITE_API_URL` (normalised by appending `/api`). Every request goes through the shared `apiClient`, so the value applies everywhere, including signup, phone/email verification and place search.
+`GET /api/health/` runs `SELECT 1` and returns `{"ok": true, "database": "ok"}`. It is also the Render health check path, because a service whose database is missing or unreachable otherwise answers every data-backed API call with an opaque `500` — the database is verified, not just the process.
 
-After changing frontend environment variables, **rebuild/redeploy** the React service — Vite inlines them at build time. Frontend variables are public; never put secrets in them.
+If `/api/health/` returns `503`, the deployment is broken rather than the frontend:
+
+- the build command must include `python manage.py migrate --noinput` (it does in `render.yaml`), and
+- `DATABASE_URL` must point at a database that still exists — Render's free PostgreSQL instances expire.
 
 ### Deployment checklist
 
-- [ ] `django-cors-headers` installed (`requirements.txt`) — already present.
-- [ ] Backend `FRONTEND_URL` / `DJANGO_CORS_ALLOWED_ORIGINS` set to the React origin.
-- [ ] `DJANGO_ALLOWED_HOSTS` contains the Django hostname.
-- [ ] `VITE_API_BASE_URL` points at the Django backend (`https://…/api`).
+- [ ] Vercel `VITE_API_BASE_URL` = `https://yeildary.onrender.com/api`, and the project redeployed.
+- [ ] Backend `FRONTEND_URL` / `DJANGO_CORS_ALLOWED_ORIGINS` set to `https://www.yieldary.us`.
+- [ ] `DJANGO_ALLOWED_HOSTS` contains `yeildary.onrender.com`.
+- [ ] `DATABASE_URL` set and `python manage.py migrate` run against it.
+- [ ] `GET https://yeildary.onrender.com/api/health/` returns `200`.
 - [ ] Backend secrets set in the Render dashboard (`DJANGO_SECRET_KEY`, `GEMINI_API_KEY`, `EMAIL_*`).
-- [ ] Both services redeployed.
 - [ ] Registration, login and a dashboard API request tested on the deployed site.
