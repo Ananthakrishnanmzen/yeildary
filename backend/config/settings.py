@@ -44,12 +44,23 @@ SECRET_KEY = os.environ.get(
     'django-insecure-yieldary-dev-secret-key-change-in-production',
 )
 
-DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() == 'true'
+# Render injects RENDER=true and RENDER_EXTERNAL_HOSTNAME for web services.
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME', '').strip()
+IS_RENDER = bool(os.environ.get('RENDER')) or bool(RENDER_EXTERNAL_HOSTNAME)
 
-ALLOWED_HOSTS = os.environ.get(
-    'DJANGO_ALLOWED_HOSTS',
-    'localhost,127.0.0.1,testserver',
-).split(',')
+# DEBUG defaults to on locally and off on Render.
+DEBUG = os.environ.get('DJANGO_DEBUG', 'false' if IS_RENDER else 'true').lower() == 'true'
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get(
+        'DJANGO_ALLOWED_HOSTS',
+        'localhost,127.0.0.1,testserver,.onrender.com',
+    ).split(',')
+    if host.strip()
+]
+if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -71,6 +82,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -109,8 +121,20 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# Use PostgreSQL when DATABASE_URL/POSTGRES_DB is configured, otherwise SQLite for local dev
-if os.environ.get('POSTGRES_DB'):
+# Prefer DATABASE_URL (Render/Heroku style), then POSTGRES_* vars, else SQLite for local dev
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
+
+if DATABASE_URL:
+    import dj_database_url
+
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+elif os.environ.get('POSTGRES_DB'):
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -143,7 +167,23 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# WhiteNoise serves collected static files in production (DEBUG=False).
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+    },
+}
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+if IS_RENDER:
+    # Render terminates TLS at its proxy, so honour its forwarded scheme header.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SESSION_COOKIE_SECURE', 'true').lower() == 'true'
+    CSRF_COOKIE_SECURE = os.environ.get('DJANGO_CSRF_COOKIE_SECURE', 'true').lower() == 'true'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -162,27 +202,46 @@ SIMPLE_JWT = {
 }
 
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = [
+
+_LOCAL_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+]
+# Comma-separated overrides, e.g. DJANGO_CORS_ALLOWED_ORIGINS=https://yieldary.vercel.app
+_EXTRA_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('DJANGO_CORS_ALLOWED_ORIGINS', '').split(',')
+    if origin.strip()
+]
+_EXTRA_CSRF_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+CORS_ALLOWED_ORIGINS = _LOCAL_ORIGINS + _EXTRA_CORS_ORIGINS
+
+CSRF_TRUSTED_ORIGINS = _LOCAL_ORIGINS + _EXTRA_CORS_ORIGINS + _EXTRA_CSRF_ORIGINS
+if RENDER_EXTERNAL_HOSTNAME:
+    _RENDER_ORIGIN = f'https://{RENDER_EXTERNAL_HOSTNAME}'
+    CORS_ALLOWED_ORIGINS.append(_RENDER_ORIGIN)
+    CSRF_TRUSTED_ORIGINS.append(_RENDER_ORIGIN)
 
 # Google Earth Engine credentials for Module 1 & Module 2
+# On Render a Secret File can be mounted at /etc/secrets/gee-key.json.
+_RENDER_GEE_SECRET = '/etc/secrets/gee-key.json'
+_DEFAULT_GEE_KEY_PATH = (
+    _RENDER_GEE_SECRET if os.path.isfile(_RENDER_GEE_SECRET) else str(BASE_DIR / 'gee-key.json')
+)
+
 os.environ.setdefault('GEE_SERVICE_ACCOUNT', 'Gee-backend@prepmately.iam.gserviceaccount.com')
-os.environ.setdefault('GEE_PRIVATE_KEY_PATH', str(BASE_DIR / 'gee-key.json'))
+os.environ.setdefault('GEE_PRIVATE_KEY_PATH', _DEFAULT_GEE_KEY_PATH)
 os.environ.setdefault('GEE_PROJECT_ID', 'prepmately')
 GEE_SERVICE_ACCOUNT_KEY_PATH = os.environ.get(
     'GEE_SERVICE_ACCOUNT_KEY_PATH',
-    str(BASE_DIR / 'gee-key.json'),
+    _DEFAULT_GEE_KEY_PATH,
 )
 
 # Farmer dashboard destination after login/signup.
@@ -218,15 +277,7 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 
-# CORS / CSRF (for Vite frontend)
-# (CORS_ALLOW_CREDENTIALS already set above)
-
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-]
+# CORS / CSRF (configured above; add production frontend origins via env vars)
 
 # Email (Resend SMTP in production; console backend in development by default)
 EMAIL_BACKEND = os.environ.get(

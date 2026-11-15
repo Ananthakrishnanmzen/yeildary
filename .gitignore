@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 *.sqlite3
 db.sqlite3
+staticfiles/
 
 # Node / React / Vite
 node_modules/
