@@ -33,31 +33,6 @@ urlpatterns = [
     ),
     path('api/farmer/signup/', views.farmer_signup_api, name='farmer_signup_api'),
     path('api/farmer/signup', views.farmer_signup_api, name='farmer_signup_api_no_slash'),
-    path('api/email/send-code/', views.email_send_code, name='email_send_code'),
-    path('api/email/send-code', views.email_send_code, name='email_send_code_no_slash'),
-    path('api/email/verify-code/', views.email_verify_code, name='email_verify_code'),
-    path('api/email/verify-code', views.email_verify_code, name='email_verify_code_no_slash'),
-    # Password reset (email link uses the console backend in development).
-    path(
-        'password-reset/',
-        views.FarmerPasswordResetView.as_view(),
-        name='password_reset',
-    ),
-    path(
-        'password-reset/done/',
-        views.FarmerPasswordResetDoneView.as_view(),
-        name='password_reset_done',
-    ),
-    path(
-        'reset/<uidb64>/<token>/',
-        views.FarmerPasswordResetConfirmView.as_view(),
-        name='password_reset_confirm',
-    ),
-    path(
-        'reset/done/',
-        views.FarmerPasswordResetCompleteView.as_view(),
-        name='password_reset_complete',
-    ),
     # Consent pages linked from signup.
     path(
         'terms/',

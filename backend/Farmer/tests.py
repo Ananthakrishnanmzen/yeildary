@@ -21,13 +21,11 @@ class FarmerUrlTests(TestCase):
         self.assertEqual(reverse('farmer:signup'), '/signup/')
         self.assertEqual(reverse('farmer:login_page'), '/login/')
         self.assertEqual(reverse('farmer:dashboard'), '/dashboard/')
-        self.assertEqual(reverse('farmer:password_reset'), '/password-reset/')
 
     def test_auth_pages_render(self):
         for url in [
             reverse('farmer:login'),
             reverse('farmer:signup'),
-            reverse('farmer:password_reset'),
             reverse('farmer:terms'),
             reverse('farmer:privacy'),
             reverse('farmer:researcher_placeholder'),
@@ -128,56 +126,6 @@ class PhoneVerificationTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 409)
-
-
-class FailingEmailBackend(BaseEmailBackend):
-    """Email backend that always fails, used to simulate a broken SMTP setup."""
-
-    def send_messages(self, email_messages):
-        raise RuntimeError('SMTP is unavailable')
-
-
-class EmailVerificationTests(TestCase):
-    @override_settings(PHONE_VERIFICATION_DEV_MODE=True)
-    def test_send_and_verify_code(self):
-        response = self.client.post(
-            reverse('farmer:email_send_code'),
-            data=json.dumps({'email': 'farmer@example.com'}),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertTrue(payload['ok'])
-        self.assertEqual(len(payload['dev_code']), 6)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn(payload['dev_code'], mail.outbox[0].body)
-
-        response = self.client.post(
-            reverse('farmer:email_verify_code'),
-            data=json.dumps(
-                {'email': 'farmer@example.com', 'code': payload['dev_code']}
-            ),
-            content_type='application/json',
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            self.client.session['farmer_email_verified']['email'],
-            'farmer@example.com',
-        )
-
-    @override_settings(
-        PHONE_VERIFICATION_DEV_MODE=False,
-        EMAIL_BACKEND='Farmer.tests.FailingEmailBackend',
-    )
-    def test_smtp_failure_is_reported(self):
-        with self.assertLogs('Farmer.views', level='ERROR'):
-            response = self.client.post(
-                reverse('farmer:email_send_code'),
-                data=json.dumps({'email': 'farmer@example.com'}),
-                content_type='application/json',
-            )
-        self.assertEqual(response.status_code, 503)
-        self.assertFalse(response.json()['ok'])
 
 
 class FarmerSignupTests(TestCase):
@@ -375,28 +323,3 @@ class FarmerLoginTests(TestCase):
         self.assertNotIn('_auth_user_id', self.client.session)
 
 
-@override_settings(
-    MAILERS={
-        'default': {
-            'BACKEND': 'django.core.mail.backends.locmem.EmailBackend',
-        }
-    }
-)
-class PasswordResetTests(TestCase):
-    def test_password_reset_sends_email(self):
-        User.objects.create_user(
-            username='anitha@example.com',
-            email='anitha@example.com',
-            password='Verdant-Field-42!',
-            first_name='Anitha',
-        )
-        mail.outbox.clear()
-        response = self.client.post(
-            reverse('farmer:password_reset'),
-            {'email': 'anitha@example.com'},
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse('farmer:password_reset_done'))
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('reset', mail.outbox[0].subject.lower())
-        self.assertIn('/reset/', mail.outbox[0].body)

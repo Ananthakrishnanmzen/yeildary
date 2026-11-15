@@ -3,11 +3,8 @@ import { Loader2, MapPin, Sprout } from 'lucide-react';
 import { type AuthStage, useAuth } from '../context/AuthContext';
 import {
   BACKEND_BASE_URL,
-  describeApiError,
   searchPlaceApi,
-  sendEmailCodeApi,
   toErrorMessage,
-  verifyEmailCodeApi,
 } from '../services/api';
 import type { PlaceResult } from '../services/api';
 
@@ -48,13 +45,6 @@ export default function AuthPage() {
   const [userType, setUserType] = useState('farmer');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [verifiedEmail, setVerifiedEmail] = useState('');
-  const [emailOtpOpen, setEmailOtpOpen] = useState(false);
-  const [emailOtpCode, setEmailOtpCode] = useState('');
-  const [emailStatus, setEmailStatus] = useState("We'll send a 6-digit verification code to your email.");
-  const [sendingEmailCode, setSendingEmailCode] = useState(false);
-  const [verifyingEmailCode, setVerifyingEmailCode] = useState(false);
   const [gender, setGender] = useState('');
   const [phone, setPhone] = useState('');
   const [farmArea, setFarmArea] = useState('');
@@ -79,7 +69,7 @@ export default function AuthPage() {
   const [stage, setStage] = useState<AuthStage>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  const isBusy = stage !== 'idle' || sendingEmailCode || verifyingEmailCode;
+  const isBusy = stage !== 'idle';
 
   const passwordStrength = useMemo(() => {
     let score = 0;
@@ -110,65 +100,6 @@ export default function AuthPage() {
       if (searchTimer.current) window.clearTimeout(searchTimer.current);
     };
   }, [placeQuery]);
-
-  const handleSendEmailCode = async () => {
-    setError(null);
-    const normalized = email.trim().toLowerCase();
-    if (!normalized || !EMAIL_REGEX.test(normalized)) {
-      setError('Enter a valid email address first.');
-      return;
-    }
-    setSendingEmailCode(true);
-    try {
-      const res = await sendEmailCodeApi(normalized);
-      if (!res.ok) {
-        setError(toErrorMessage(res.error, 'Could not send code.'));
-        return;
-      }
-      setEmailOtpOpen(true);
-      setEmailStatus(
-        res.dev_code
-          ? `Verification code sent to ${normalized} (Dev code: ${res.dev_code}).`
-          : `Verification code sent to ${normalized}.`,
-      );
-    } catch (err: any) {
-      const errorMessage =
-        err?.response?.data?.error?.message ||
-        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
-        describeApiError(err, 'Could not send code.');
-      setError(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
-    } finally {
-      setSendingEmailCode(false);
-    }
-  };
-
-  const handleVerifyEmailCode = async () => {
-    setError(null);
-    if (!emailOtpCode.trim()) {
-      setError('Enter the verification code.');
-      return;
-    }
-    setVerifyingEmailCode(true);
-    try {
-      const res = await verifyEmailCodeApi(email.trim().toLowerCase(), emailOtpCode.trim());
-      if (!res.ok) {
-        setError(toErrorMessage(res.error, 'Verification failed.'));
-        return;
-      }
-      setEmailVerified(true);
-      setVerifiedEmail(email.trim().toLowerCase());
-      setEmailOtpOpen(false);
-      setEmailStatus('Email address verified.');
-    } catch (err: any) {
-      const errorMessage =
-        err?.response?.data?.error?.message ||
-        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
-        describeApiError(err, 'Verification failed.');
-      setError(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
-    } finally {
-      setVerifyingEmailCode(false);
-    }
-  };
 
   const selectPlace = (p: PlaceResult) => {
     setPlaceQuery(p.name);
@@ -220,10 +151,6 @@ export default function AuthPage() {
     }
     if (!EMAIL_REGEX.test(email.trim())) {
       setError('Please enter a valid email address.');
-      return;
-    }
-    if (!emailVerified || verifiedEmail !== email.trim().toLowerCase()) {
-      setError('Verify this email address with the code before creating your account.');
       return;
     }
     if (!placeName || !latitude || !longitude) {
@@ -342,9 +269,8 @@ export default function AuthPage() {
                 </div>
 
                 <div>
-                  <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="mb-2">
                     <label className="block text-xs font-medium text-slate-300">Password</label>
-                    <a href={`${BACKEND_BASE_URL}/password-reset/`} target="_blank" rel="noopener" className="text-xs font-medium text-slate-400 transition hover:text-lime-400">Forgot password?</a>
                   </div>
                   <div className="relative">
                     <input
@@ -475,19 +401,7 @@ export default function AuthPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-2 block text-xs font-medium text-slate-300">Email address</label>
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <div className="min-w-0 flex-1">
-                          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); if (emailVerified) { setEmailVerified(false); setVerifiedEmail(''); } }} className={INPUT_CLASS} placeholder="you@example.com" autoComplete="email" />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleSendEmailCode}
-                          disabled={sendingEmailCode || isBusy || !EMAIL_REGEX.test(email.trim()) || emailVerified}
-                          className="shrink-0 rounded-xl border border-lime-400/40 bg-lime-400/10 px-4 py-3 text-xs font-semibold text-lime-400 transition hover:bg-lime-400/20 focus:outline-none focus:ring-2 focus:ring-lime-400/30 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {sendingEmailCode ? 'Sending...' : emailVerified ? 'Verified' : 'Send code'}
-                        </button>
-                      </div>
+                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={INPUT_CLASS} placeholder="you@example.com" autoComplete="email" />
                     </div>
                     <div>
                       <label className="mb-2 block text-xs font-medium text-slate-300">Gender</label>
@@ -509,44 +423,9 @@ export default function AuthPage() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-slate-300">Email verification status</label>
-                    <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[11px] leading-5 text-slate-400">{emailStatus}</p>
-                        {emailVerified && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-lime-400/30 bg-lime-400/10 px-2.5 py-1 font-data text-[9px] uppercase tracking-wider text-lime-400">
-                            Verified
-                          </span>
-                        )}
-                      </div>
-
-                      {emailOtpOpen && (
-                        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            maxLength={6}
-                            value={emailOtpCode}
-                            onChange={(e) => setEmailOtpCode(e.target.value)}
-                            placeholder="6-digit code"
-                            className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center font-data text-sm tracking-[0.3em] text-white outline-none transition focus:border-lime-400/70 focus:ring-2 focus:ring-lime-400/20"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleVerifyEmailCode}
-                            disabled={verifyingEmailCode}
-                            className="rounded-xl border border-lime-400/40 bg-lime-400/15 px-4 py-3 text-xs font-semibold text-lime-400 transition hover:bg-lime-400/25 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {verifyingEmailCode ? 'Verifying...' : 'Verify'}
-                          </button>
-                        </div>
-                      )}
-
-                      <p className="mt-2 text-[10px] leading-4 text-slate-600">
-                        {emailVerified ? 'Email verified.' : "We'll send a 6-digit verification code to your email."}
-                      </p>
-                    </div>
+                    <label className="mb-2 block text-xs font-medium text-slate-300">Phone number</label>
+                    <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={INPUT_CLASS} placeholder="+919876543210" autoComplete="tel" />
+                    <p className="mt-2 text-[10px] text-slate-600">Optional. Used for contact only.</p>
                   </div>
 
                   <div>

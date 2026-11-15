@@ -32,9 +32,8 @@
     </div>
 
     <div>
-      <div class="mb-2 flex items-center justify-between gap-3">
+      <div class="mb-2">
         <label for="{{ form.password.id_for_label }}" class="block text-xs font-medium text-slate-300">Password</label>
-        <a href="{% url 'farmer:password_reset' %}" class="text-xs font-medium text-slate-400 transition hover:text-lime">Forgot password?</a>
       </div>
       <div class="relative">
         {{ form.password }}

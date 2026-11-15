@@ -235,20 +235,6 @@ export async function verifyPhoneCodeApi(phone: string, code: string): Promise<P
   return data;
 }
 
-export async function sendEmailCodeApi(email: string): Promise<PhoneSendResponse> {
-  const { data } = await apiClient.post<PhoneSendResponse>(
-    '/email/send-code/',
-    { email },
-    { timeout: 30000 },
-  );
-  return data;
-}
-
-export async function verifyEmailCodeApi(email: string, code: string): Promise<PhoneSendResponse> {
-  const { data } = await apiClient.post<PhoneSendResponse>('/email/verify-code/', { email, code });
-  return data;
-}
-
 export interface PlaceResult {
   name: string;
   display_name: string;
