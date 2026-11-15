@@ -6,19 +6,6 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load variables from a local .env file (if present) so EMAIL_* etc. are picked up.
-_env_file = BASE_DIR / '.env'
-if _env_file.is_file():
-    with _env_file.open() as _f:
-        for _line in _f:
-            _line = _line.strip()
-            if not _line or _line.startswith('#') or '=' not in _line:
-                continue
-            _key, _, _value = _line.partition('=')
-            _key = _key.strip()
-            _value = _value.strip().strip('"').strip("'")
-            os.environ.setdefault(_key, _value)
-
 
 def _load_dotenv(env_path: Path) -> None:
     if not env_path.is_file():
@@ -248,5 +235,5 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'resend')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.environ.get(
     'DEFAULT_FROM_EMAIL',
-    'Yieldary AI <onboarding@resend.dev>',
+    'Yieldary AI <no-reply@mail.yieldary.us>',
 )
