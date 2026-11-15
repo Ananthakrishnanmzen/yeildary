@@ -22,7 +22,7 @@ const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
 const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png'];
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/pjpeg'];
 
-// Instant samples strictly contain Crop Leaf Specimens (Soil Report is removed from samples as requested)
+// Instant samples strictly contain Crop Leaf Specimens
 const SAMPLE_CASES = [
   {
     id: 'banana_sigatoka',
@@ -35,18 +35,6 @@ const SAMPLE_CASES = [
     name: 'Paddy Foliage Blight',
     tag: 'Bacterial Sheath',
     image: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=700&q=80',
-  },
-  {
-    id: 'pepper_leaf_wilt',
-    name: 'Pepper Leaf Rot',
-    tag: 'Phytophthora Foliar Blight',
-    image: 'https://images.unsplash.com/photo-1618160702438-9b02ab6515c9?auto=format&fit=crop&w=700&q=80',
-  },
-  {
-    id: 'cardamom_leaf_blight',
-    name: 'Cardamom Leaf Blotch',
-    tag: 'Colletotrichum Foliar Spot',
-    image: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=700&q=80',
   },
 ];
 

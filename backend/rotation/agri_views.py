@@ -779,20 +779,6 @@ def diagnostics_samples_view(request: Request) -> Response:
                 "description": "Water-soaked marginal lesions on paddy tillers",
                 "image_url": "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=600&q=80",
             },
-            {
-                "id": "pepper_leaf_wilt",
-                "name": "Black Pepper Leaf - Phytophthora Foliar Rot",
-                "crop": "Black Pepper",
-                "description": "Dark brown circular water-soaked lesions with fimbriate margins on leaf lamina",
-                "image_url": "https://images.unsplash.com/photo-1618160702438-9b02ab6515c9?auto=format&fit=crop&w=600&q=80",
-            },
-            {
-                "id": "cardamom_leaf_blight",
-                "name": "Cardamom Leaf - Colletotrichum Blotch",
-                "crop": "Cardamom",
-                "description": "Spherical necrotic lesions coalescing into large foliar blight patches",
-                "image_url": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=600&q=80",
-            },
         ],
         status=status.HTTP_200_OK,
     )
