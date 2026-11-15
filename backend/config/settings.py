@@ -3,6 +3,14 @@
 from datetime import timedelta
 import os
 from pathlib import Path
+import warnings
+
+# Suppress invalid escape sequence SyntaxWarnings specifically from google.genai
+warnings.filterwarnings(
+    "ignore",
+    category=SyntaxWarning,
+    module=r"google\.genai.*"
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
