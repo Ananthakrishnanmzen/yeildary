@@ -16,7 +16,7 @@ interface AuthContextValue {
   profile: FarmerProfile | null;
   isInitializing: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   register: (
     params: {
       userType: string;
@@ -76,7 +76,7 @@ function extractApiError(err: unknown, fallback: string): string {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(() =>
-    localStorage.getItem(TOKEN_STORAGE_KEY),
+    localStorage.getItem(TOKEN_STORAGE_KEY) || sessionStorage.getItem(TOKEN_STORAGE_KEY),
   );
   const [profile, setProfile] = useState<FarmerProfile | null>(null);
   const [isInitializing, setIsInitializing] = useState<boolean>(Boolean(accessToken));
@@ -84,6 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem(REFRESH_STORAGE_KEY);
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(REFRESH_STORAGE_KEY);
     setAccessToken(null);
     setProfile(null);
   }, []);
@@ -116,11 +118,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [accessToken, logout]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, rememberMe = true) => {
     try {
       const tokens = await loginFarmerApi(email.trim().toLowerCase(), password);
-      localStorage.setItem(TOKEN_STORAGE_KEY, tokens.access);
-      localStorage.setItem(REFRESH_STORAGE_KEY, tokens.refresh);
+      const storage = rememberMe ? localStorage : sessionStorage;
+      // Clear the other storage to avoid stale tokens
+      (rememberMe ? sessionStorage : localStorage).removeItem(TOKEN_STORAGE_KEY);
+      (rememberMe ? sessionStorage : localStorage).removeItem(REFRESH_STORAGE_KEY);
+      storage.setItem(TOKEN_STORAGE_KEY, tokens.access);
+      storage.setItem(REFRESH_STORAGE_KEY, tokens.refresh);
       setAccessToken(tokens.access);
       const userProfile = await fetchFarmerProfileApi();
       setProfile(userProfile);

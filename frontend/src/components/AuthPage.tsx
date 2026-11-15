@@ -187,7 +187,7 @@ export default function AuthPage() {
     }
     setStage('authenticating');
     try {
-      await login(loginEmail, loginPassword);
+      await login(loginEmail, loginPassword, rememberMe);
     } catch (err: any) {
       setError(err?.message || 'Login failed.');
     } finally {
