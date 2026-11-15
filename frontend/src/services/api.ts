@@ -164,3 +164,67 @@ export async function recalculateModule3StrategyApi(
   );
   return data;
 }
+
+// ---------------------------------------------------------------------------
+// Lomura Precision Agriculture & FPO Suite API Services
+// ---------------------------------------------------------------------------
+export const dashboardService = {
+  getMetrics: () => apiClient.get('/dashboard/metrics/'),
+  getWeatherForecast: () => apiClient.get('/dashboard/weather-forecast/'),
+  getPlotsHeatmap: () => apiClient.get('/dashboard/plots-heatmap/'),
+  getYieldSpline: () => apiClient.get('/dashboard/yield-spline/'),
+  getAlerts: () => apiClient.get('/dashboard/alerts/'),
+  broadcastWarning: (payload: Record<string, unknown>) =>
+    apiClient.post('/dashboard/broadcast/', payload),
+};
+
+export const profilerService = {
+  getFieldProfile: (lat: number, lon: number) =>
+    apiClient.get(`/field-profile/?lat=${lat}&lon=${lon}`),
+  predictCrop: (params: Record<string, number>) =>
+    apiClient.get('/predict-crop/', { params }),
+};
+
+export const simulatorService = {
+  simulateRotation: (payload: Record<string, unknown>) =>
+    apiClient.post('/simulate-rotation/', payload),
+  checkNdvi: (lat: number, lon: number) =>
+    apiClient.get(`/ndvi-check/?lat=${lat}&lon=${lon}`),
+};
+
+export const diagnosticsService = {
+  scanImage: (formData: FormData) =>
+    apiClient.post('/diagnostics/scan/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  getSamples: () => apiClient.get('/diagnostics/samples/'),
+};
+
+export const voiceService = {
+  processVoice: (formData: FormData) =>
+    apiClient.post('/voice/process/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  sendChat: (queryText: string, language: string) =>
+    apiClient.post('/voice/chat/', { query_text: queryText, language }),
+  getVoiceSamples: (lang = 'ml') =>
+    apiClient.get(`/voice/samples/?lang=${lang}`),
+};
+
+export const crmService = {
+  getFarmers: (params: Record<string, string> = {}) =>
+    apiClient.get('/crm/farmers/', { params }),
+  getFarmerById: (id: number) => apiClient.get(`/crm/farmers/${id}/`),
+  createFarmer: (payload: Record<string, unknown>) =>
+    apiClient.post('/crm/farmers/', payload),
+  updateFarmerRisk: (id: number, payload: Record<string, unknown>) =>
+    apiClient.patch(`/crm/farmers/${id}/`, payload),
+  deleteFarmer: (id: number) => apiClient.delete(`/crm/farmers/${id}/`),
+};
+
+export const schemesService = {
+  getAllSchemes: () => apiClient.get('/schemes/'),
+  matchSchemes: (payload: Record<string, string>) =>
+    apiClient.post('/schemes/match/', payload),
+};
+

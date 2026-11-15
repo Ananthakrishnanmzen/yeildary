@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Award,
   CheckCircle2,
+  Compass,
   Crosshair,
   ExternalLink,
   Flame,
   Info,
+  LayoutDashboard,
   LogOut,
   MapPin,
+  Mic,
+  RotateCw,
+  Scan,
   Sprout,
+  Users,
   X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -15,6 +22,21 @@ import { fetchFarmerTelemetryApi, fetchFarmerTerrainApi } from '../services/api'
 import type { TelemetryReport, TerrainReport, WaterStressSeriesItem } from '../types/farmer';
 import RotationStrategyModule from './RotationStrategyModule';
 import { ScienceInfo } from './ScienceGlossaryInfo';
+import DiagnosticsScannerView from './lomura/DiagnosticsScannerView';
+import FarmerCrmView from './lomura/FarmerCrmView';
+import FieldShiftSimulatorView from './lomura/FieldShiftSimulatorView';
+import FpoCommandView from './lomura/FpoCommandView';
+import SchemesWizardView from './lomura/SchemesWizardView';
+import VoiceDeskView from './lomura/VoiceDeskView';
+
+type ActiveSuiteTab =
+  | 'mission_control'
+  | 'fpo_command'
+  | 'simulator'
+  | 'diagnostics'
+  | 'voice'
+  | 'crm'
+  | 'schemes';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -118,6 +140,9 @@ export default function FarmerDashboard() {
   const [erosionLayerOn, setErosionLayerOn] = useState(false);
   const [heatmapLayerOn, setHeatmapLayerOn] = useState(true);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ActiveSuiteTab>('mission_control');
+  const [fpoFocusCoord, setFpoFocusCoord] = useState<{ lat: number; lon: number } | undefined>(undefined);
+  const [crmFocusFarmerId, setCrmFocusFarmerId] = useState<number | null>(null);
 
   const loadTelemetry = useCallback(async (forceRefresh = false) => {
     try {
@@ -229,9 +254,9 @@ export default function FarmerDashboard() {
 
   return (
     <div className="min-h-screen bg-[#07090D] text-slate-100 flex flex-col">
-      {/* 1. Top Navigation Bar (h-16) */}
-      <header className="h-16 sticky top-0 z-30 border-b border-white/10 bg-[#07090D]/90 backdrop-blur-md">
-        <div className="max-w-[1440px] mx-auto h-full px-4 sm:px-6 flex items-center justify-between gap-4">
+      {/* 1. Top Navigation Bar */}
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#07090D]/90 backdrop-blur-md">
+        <div className="max-w-[1440px] mx-auto h-16 px-4 sm:px-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-9 h-9 rounded-full bg-[#84CC16]/15 border border-[#84CC16]/40 flex items-center justify-center shadow-[0_0_20px_rgba(132,204,22,0.35)] shrink-0">
               <Sprout className="w-4 h-4 text-[#84CC16]" />
@@ -241,7 +266,7 @@ export default function FarmerDashboard() {
             </span>
             <span className="hidden sm:inline-block h-4 w-px bg-white/15" />
             <span className="hidden sm:inline-block text-xs text-slate-400 truncate">
-              Vulnerability &amp; Stress Telemetry
+              Vulnerability &amp; Stress Telemetry + Lomura FPO Suite
             </span>
           </div>
 
@@ -268,10 +293,66 @@ export default function FarmerDashboard() {
             </button>
           </div>
         </div>
+
+        {/* Unified Yieldary + Lomura Module Navigation Strip */}
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 pb-2.5 flex items-center gap-1.5 overflow-x-auto">
+          {[
+            { id: 'mission_control' as const, label: 'Mission Control (GEE 1–3)', icon: LayoutDashboard },
+            { id: 'fpo_command' as const, label: 'FPO Command & Profiler', icon: Compass },
+            { id: 'simulator' as const, label: '3-Season Shift', icon: RotateCw },
+            { id: 'diagnostics' as const, label: 'Vision Scanner', icon: Scan },
+            { id: 'voice' as const, label: 'Voice Helpdesk', icon: Mic },
+            { id: 'crm' as const, label: 'Farmer CRM', icon: Users },
+            { id: 'schemes' as const, label: 'Scheme Wizard', icon: Award },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 shrink-0 transition cursor-pointer ${
+                  isActive
+                    ? 'bg-[#84CC16] text-[#07090D] font-bold shadow-[0_0_14px_rgba(132,204,22,0.35)]'
+                    : 'bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       <main className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-4 space-y-4">
-        {/* 2. Upper Bento Grid (12-col) */}
+        {activeTab === 'fpo_command' && (
+          <FpoCommandView
+            initialCoord={fpoFocusCoord || { lat: profile.latitude, lon: profile.longitude }}
+            onInspectFarmerInCrm={(farmerId) => {
+              setCrmFocusFarmerId(farmerId);
+              setActiveTab('crm');
+            }}
+          />
+        )}
+        {activeTab === 'simulator' && <FieldShiftSimulatorView />}
+        {activeTab === 'diagnostics' && <DiagnosticsScannerView />}
+        {activeTab === 'voice' && <VoiceDeskView />}
+        {activeTab === 'crm' && (
+          <FarmerCrmView
+            initialFarmerId={crmFocusFarmerId}
+            onLocateOnMap={(lat, lon) => {
+              setFpoFocusCoord({ lat, lon });
+              setActiveTab('fpo_command');
+            }}
+          />
+        )}
+        {activeTab === 'schemes' && <SchemesWizardView />}
+
+        {activeTab === 'mission_control' && (
+          <>
+            {/* 2. Upper Bento Grid (12-col) */}
         <div className="grid grid-cols-12 gap-4">
           {/* A. Left Column (col-span-3): Compact Farmer Profile + Monthly Telemetry Insights */}
           <div className="col-span-12 lg:col-span-3 flex flex-col gap-4">
@@ -566,6 +647,8 @@ export default function FarmerDashboard() {
 
         {/* 3. Lower Bento Grid (12-col): Scenario Weighting + Crop Rotation Strategy Comparison */}
         <RotationStrategyModule profile={profile} telemetry={telemetry} terrain={terrain} />
+          </>
+        )}
       </main>
 
       {/* NASA Data & Methodology Modal */}

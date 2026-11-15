@@ -103,3 +103,42 @@ class Module3RotationTests(TestCase):
             self.assertIn('pest_cycle_disruption_score', recalc.data['data']['resilience_build'])
             self.assertIn('forage_biomass_potential', recalc.data['data']['resilience_build'])
             self.assertTrue(recalc.data['data']['local_expertise_charter'])
+
+    def test_lomura_suite_endpoints(self):
+        metrics_res = self.client.get('/api/dashboard/metrics/')
+        self.assertEqual(metrics_res.status_code, 200)
+        self.assertIn('cluster_name', metrics_res.data)
+
+        prof_res = self.client.get('/api/field-profile/?lat=9.8959&lon=76.7184')
+        self.assertEqual(prof_res.status_code, 200)
+        self.assertEqual(prof_res.data['status'], 'success')
+        self.assertIn('crop_recommendations', prof_res.data)
+
+        sim_res = self.client.post(
+            '/api/simulate-rotation/',
+            {'water_weight': 0.7, 'profit_weight': 0.8, 'soil_recovery_weight': 0.9, 'labor_weight': 0.5},
+            format='json',
+        )
+        self.assertEqual(sim_res.status_code, 200)
+        self.assertIn('top_rotation_regime', sim_res.data)
+
+        diag_res = self.client.post('/api/diagnostics/scan/', {'sample_key': 'banana_sigatoka'})
+        self.assertEqual(diag_res.status_code, 200)
+        self.assertIn('diagnosis_badge', diag_res.data)
+
+        voice_res = self.client.post('/api/voice/chat/', {'query_text': 'banana leaf spot', 'language': 'ml'}, format='json')
+        self.assertEqual(voice_res.status_code, 200)
+        self.assertIn('answer_text', voice_res.data)
+
+        crm_res = self.client.get('/api/crm/farmers/')
+        self.assertEqual(crm_res.status_code, 200)
+        self.assertTrue(len(crm_res.data) >= 10)
+
+        scheme_res = self.client.post(
+            '/api/schemes/match/',
+            {'crop': 'Paddy', 'land_category': 'small', 'farmer_category': 'general'},
+            format='json',
+        )
+        self.assertEqual(scheme_res.status_code, 200)
+        self.assertGreater(scheme_res.data['total_matched'], 0)
+
