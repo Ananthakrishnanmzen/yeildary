@@ -2,6 +2,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.mail.backends.base import BaseEmailBackend
 from django.test import TestCase, override_settings
 from django.urls import resolve, reverse
 
@@ -127,6 +128,56 @@ class PhoneVerificationTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 409)
+
+
+class FailingEmailBackend(BaseEmailBackend):
+    """Email backend that always fails, used to simulate a broken SMTP setup."""
+
+    def send_messages(self, email_messages):
+        raise RuntimeError('SMTP is unavailable')
+
+
+class EmailVerificationTests(TestCase):
+    @override_settings(PHONE_VERIFICATION_DEV_MODE=True)
+    def test_send_and_verify_code(self):
+        response = self.client.post(
+            reverse('farmer:email_send_code'),
+            data=json.dumps({'email': 'farmer@example.com'}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['ok'])
+        self.assertEqual(len(payload['dev_code']), 6)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(payload['dev_code'], mail.outbox[0].body)
+
+        response = self.client.post(
+            reverse('farmer:email_verify_code'),
+            data=json.dumps(
+                {'email': 'farmer@example.com', 'code': payload['dev_code']}
+            ),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.client.session['farmer_email_verified']['email'],
+            'farmer@example.com',
+        )
+
+    @override_settings(
+        PHONE_VERIFICATION_DEV_MODE=False,
+        EMAIL_BACKEND='Farmer.tests.FailingEmailBackend',
+    )
+    def test_smtp_failure_is_reported(self):
+        with self.assertLogs('Farmer.views', level='ERROR'):
+            response = self.client.post(
+                reverse('farmer:email_send_code'),
+                data=json.dumps({'email': 'farmer@example.com'}),
+                content_type='application/json',
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(response.json()['ok'])
 
 
 class FarmerSignupTests(TestCase):

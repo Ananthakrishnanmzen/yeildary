@@ -9,13 +9,40 @@ import type {
   TerrainReport,
 } from '../types/farmer';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
+/**
+ * API base URL resolution.
+ *
+ * `VITE_API_BASE_URL` is the canonical variable and should include the `/api` suffix,
+ * e.g. `https://yieldary-backend.onrender.com/api`.
+ *
+ * `VITE_API_URL` is also accepted (the name used in Render's docs) and is normalised to
+ * always end with `/api`. Without either, requests fall back to the same-origin `/api`
+ * path, which is what the Vite dev proxy (`vite.config.ts`) targets.
+ */
+const RAW_API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? '/api';
+
+function normalizeApiBaseUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  if (!trimmed) {
+    return '/api';
+  }
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+}
+
+export const API_BASE_URL = normalizeApiBaseUrl(RAW_API_BASE_URL);
+
+/** Backend origin without the `/api` suffix (used for server-rendered pages such as password reset). */
+export const BACKEND_BASE_URL = API_BASE_URL.replace(/\/api$/, '');
 
 export const TOKEN_STORAGE_KEY = 'yieldary_jwt_access';
 export const REFRESH_STORAGE_KEY = 'yieldary_jwt_refresh';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  // Required because the email/phone verification flow stores its state in the
+  // Django session, which is a different origin from this app in production.
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -73,22 +100,33 @@ export interface PhoneSendResponse {
 }
 
 export async function sendPhoneCodeApi(phone: string): Promise<PhoneSendResponse> {
-  const { data } = await axios.post<PhoneSendResponse>('/api/phone/send-code/', { phone_number: phone });
+  const { data } = await apiClient.post<PhoneSendResponse>(
+    '/phone/send-code/',
+    { phone_number: phone },
+    { timeout: 30000 },
+  );
   return data;
 }
 
 export async function verifyPhoneCodeApi(phone: string, code: string): Promise<PhoneSendResponse> {
-  const { data } = await axios.post<PhoneSendResponse>('/api/phone/verify-code/', { phone_number: phone, code });
+  const { data } = await apiClient.post<PhoneSendResponse>('/phone/verify-code/', {
+    phone_number: phone,
+    code,
+  });
   return data;
 }
 
 export async function sendEmailCodeApi(email: string): Promise<PhoneSendResponse> {
-  const { data } = await axios.post<PhoneSendResponse>('/api/email/send-code/', { email });
+  const { data } = await apiClient.post<PhoneSendResponse>(
+    '/email/send-code/',
+    { email },
+    { timeout: 30000 },
+  );
   return data;
 }
 
 export async function verifyEmailCodeApi(email: string, code: string): Promise<PhoneSendResponse> {
-  const { data } = await axios.post<PhoneSendResponse>('/api/email/verify-code/', { email, code });
+  const { data } = await apiClient.post<PhoneSendResponse>('/email/verify-code/', { email, code });
   return data;
 }
 
@@ -101,7 +139,9 @@ export interface PlaceResult {
 }
 
 export async function searchPlaceApi(q: string): Promise<PlaceResult[]> {
-  const { data } = await axios.get<PlaceResult[]>('/api/location/search/', { params: { q, limit: 6 } });
+  const { data } = await apiClient.get<PlaceResult[]>('/location/search/', {
+    params: { q, limit: 6 },
+  });
   return Array.isArray(data) ? data : [];
 }
 
@@ -133,7 +173,7 @@ export interface FarmerSignupApiResponse {
 }
 
 export async function signupFarmerApi(payload: FarmerSignupApiPayload): Promise<FarmerSignupApiResponse> {
-  const { data } = await axios.post<FarmerSignupApiResponse>('/api/farmer/signup/', payload);
+  const { data } = await apiClient.post<FarmerSignupApiResponse>('/farmer/signup/', payload);
   return data;
 }
 

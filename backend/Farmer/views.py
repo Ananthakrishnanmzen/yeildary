@@ -465,10 +465,18 @@ def email_send_code(request):
             from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@yieldary.ai'),
             recipient_list=[email],
             html_message=html_message,
-            fail_silently=True,
+            fail_silently=dev_mode,
         )
     except Exception:
         logger.exception('Failed to send verification email to %s', email)
+        # Do not tell the user a code was sent when SMTP is misconfigured.
+        return JsonResponse(
+            {
+                'ok': False,
+                'error': 'Could not send the verification email. Please try again shortly.',
+            },
+            status=503,
+        )
 
     response = {
         'ok': True,

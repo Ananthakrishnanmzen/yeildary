@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, MapPin, Sprout } from 'lucide-react';
 import { type AuthStage, useAuth } from '../context/AuthContext';
 import {
+  BACKEND_BASE_URL,
   searchPlaceApi,
   sendEmailCodeApi,
   verifyEmailCodeApi,
@@ -329,7 +330,7 @@ export default function AuthPage() {
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <label className="block text-xs font-medium text-slate-300">Password</label>
-                    <a href="http://127.0.0.1:8000/password-reset/" target="_blank" rel="noopener" className="text-xs font-medium text-slate-400 transition hover:text-lime-400">Forgot password?</a>
+                    <a href={`${BACKEND_BASE_URL}/password-reset/`} target="_blank" rel="noopener" className="text-xs font-medium text-slate-400 transition hover:text-lime-400">Forgot password?</a>
                   </div>
                   <div className="relative">
                     <input

@@ -184,6 +184,12 @@ if IS_RENDER:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SESSION_COOKIE_SECURE', 'true').lower() == 'true'
     CSRF_COOKIE_SECURE = os.environ.get('DJANGO_CSRF_COOKIE_SECURE', 'true').lower() == 'true'
+    # The React site and this API are separate onrender.com subdomains, and
+    # onrender.com is a public suffix, so browsers treat them as different sites.
+    # Django sessions carry the phone/email verification state used by signup,
+    # so the cookies must be allowed to travel cross-site (secure-only).
+    SESSION_COOKIE_SAMESITE = os.environ.get('DJANGO_SESSION_COOKIE_SAMESITE', 'None')
+    CSRF_COOKIE_SAMESITE = os.environ.get('DJANGO_CSRF_COOKIE_SAMESITE', 'None')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -209,25 +215,52 @@ _LOCAL_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
 ]
-# Comma-separated overrides, e.g. DJANGO_CORS_ALLOWED_ORIGINS=https://yieldary.vercel.app
-_EXTRA_CORS_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get('DJANGO_CORS_ALLOWED_ORIGINS', '').split(',')
-    if origin.strip()
-]
-_EXTRA_CSRF_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',')
-    if origin.strip()
-]
 
-CORS_ALLOWED_ORIGINS = _LOCAL_ORIGINS + _EXTRA_CORS_ORIGINS
 
-CSRF_TRUSTED_ORIGINS = _LOCAL_ORIGINS + _EXTRA_CORS_ORIGINS + _EXTRA_CSRF_ORIGINS
+def _split_origins(value: str) -> list[str]:
+    """Parse a comma-separated list of origins, dropping blanks and trailing slashes."""
+    return [
+        origin.strip().rstrip('/')
+        for origin in (value or '').split(',')
+        if origin.strip()
+    ]
+
+
+# React frontend origin. Set FRONTEND_URL=https://<react-app>.onrender.com on Render;
+# it is automatically trusted for both CORS and CSRF.
+FRONTEND_URL = os.environ.get('FRONTEND_URL', '').strip().rstrip('/')
+
+# Comma-separated overrides, e.g.
+# DJANGO_CORS_ALLOWED_ORIGINS=https://yieldary.vercel.app,https://www.yieldary.com
+_EXTRA_CORS_ORIGINS = _split_origins(os.environ.get('DJANGO_CORS_ALLOWED_ORIGINS', ''))
+_EXTRA_CSRF_ORIGINS = _split_origins(os.environ.get('DJANGO_CSRF_TRUSTED_ORIGINS', ''))
+
+
+def _unique(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(item for item in items if item))
+
+
+CORS_ALLOWED_ORIGINS = _unique(
+    _LOCAL_ORIGINS
+    + ([FRONTEND_URL] if FRONTEND_URL else [])
+    + _EXTRA_CORS_ORIGINS
+)
+
+CSRF_TRUSTED_ORIGINS = _unique(
+    _LOCAL_ORIGINS
+    + ([FRONTEND_URL] if FRONTEND_URL else [])
+    + _EXTRA_CORS_ORIGINS
+    + _EXTRA_CSRF_ORIGINS
+)
+
+# The backend's own origin (needed for the Django admin and server-rendered pages).
 if RENDER_EXTERNAL_HOSTNAME:
     _RENDER_ORIGIN = f'https://{RENDER_EXTERNAL_HOSTNAME}'
     CORS_ALLOWED_ORIGINS.append(_RENDER_ORIGIN)
     CSRF_TRUSTED_ORIGINS.append(_RENDER_ORIGIN)
+
+CORS_ALLOWED_ORIGINS = _unique(CORS_ALLOWED_ORIGINS)
+CSRF_TRUSTED_ORIGINS = _unique(CSRF_TRUSTED_ORIGINS)
 
 # Google Earth Engine credentials for Module 1 & Module 2
 # On Render a Secret File can be mounted at /etc/secrets/gee-key.json.

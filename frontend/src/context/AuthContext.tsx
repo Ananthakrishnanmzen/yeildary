@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import axios from 'axios';
 import {
+  API_BASE_URL,
   fetchFarmerProfileApi,
   loginFarmerApi,
   REFRESH_STORAGE_KEY,
@@ -72,7 +73,7 @@ function extractApiError(err: unknown, fallback: string): string {
       }
     }
     if (!err.response) {
-      return 'Cannot reach the Django backend at http://localhost:8000. Ensure the server is running.';
+      return `Cannot reach the Django backend at ${API_BASE_URL}. Check that VITE_API_BASE_URL is correct and that the backend allows this origin (FRONTEND_URL).`;
     }
     if (err.response.status >= 500) {
       return 'Server error (500). Please ensure database migrations are applied (python manage.py migrate).';
