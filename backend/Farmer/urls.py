@@ -25,6 +25,8 @@ urlpatterns = [
         name='phone_verify_firebase',
     ),
     path('api/farmer/signup/', views.farmer_signup_api, name='farmer_signup_api'),
+    path('api/email/send-code/', views.email_send_code, name='email_send_code'),
+    path('api/email/verify-code/', views.email_verify_code, name='email_verify_code'),
     # Password reset (email link uses the console backend in development).
     path(
         'password-reset/',

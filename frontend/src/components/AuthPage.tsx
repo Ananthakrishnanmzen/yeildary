@@ -3,8 +3,8 @@ import { Loader2, MapPin, Sprout } from 'lucide-react';
 import { type AuthStage, useAuth } from '../context/AuthContext';
 import {
   searchPlaceApi,
-  sendPhoneCodeApi,
-  verifyPhoneCodeApi,
+  sendEmailCodeApi,
+  verifyEmailCodeApi,
 } from '../services/api';
 import type { PlaceResult } from '../services/api';
 
@@ -45,6 +45,14 @@ export default function AuthPage() {
   const [userType, setUserType] = useState('farmer');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [emailOtpOpen, setEmailOtpOpen] = useState(false);
+  const [emailOtpCode, setEmailOtpCode] = useState('');
+  const [emailStatus, setEmailStatus] = useState("We'll send a 6-digit verification code to your email.");
+  const [emailDevCode, setEmailDevCode] = useState('');
+  const [sendingEmailCode, setSendingEmailCode] = useState(false);
+  const [verifyingEmailCode, setVerifyingEmailCode] = useState(false);
   const [gender, setGender] = useState('');
   const [phone, setPhone] = useState('');
   const [farmArea, setFarmArea] = useState('');
@@ -57,14 +65,6 @@ export default function AuthPage() {
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
 
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [verifiedPhone, setVerifiedPhone] = useState('');
-  const [otpPanelOpen, setOtpPanelOpen] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [phoneStatus, setPhoneStatus] = useState("We'll send a 6-digit verification code.");
-  const [devCode, setDevCode] = useState('');
-  const [sendingCode, setSendingCode] = useState(false);
-  const [verifyingCode, setVerifyingCode] = useState(false);
 
   const [placeQuery, setPlaceQuery] = useState('');
   const [placeResults, setPlaceResults] = useState<PlaceResult[]>([]);
@@ -77,7 +77,7 @@ export default function AuthPage() {
   const [stage, setStage] = useState<AuthStage>('idle');
   const [error, setError] = useState<string | null>(null);
 
-  const isBusy = stage !== 'idle' || sendingCode || verifyingCode;
+  const isBusy = stage !== 'idle' || sendingEmailCode || verifyingEmailCode;
 
   const passwordStrength = useMemo(() => {
     let score = 0;
@@ -109,53 +109,52 @@ export default function AuthPage() {
     };
   }, [placeQuery]);
 
-  const handleSendCode = async () => {
+  const handleSendEmailCode = async () => {
     setError(null);
-    const normalized = phone.trim();
-    if (!normalized) {
-      setError('Enter a phone number first.');
+    const normalized = email.trim().toLowerCase();
+    if (!normalized || !EMAIL_REGEX.test(normalized)) {
+      setError('Enter a valid email address first.');
       return;
     }
-    setSendingCode(true);
+    setSendingEmailCode(true);
     try {
-      const res = await sendPhoneCodeApi(normalized);
+      const res = await sendEmailCodeApi(normalized);
       if (!res.ok) {
         setError(res.error || 'Could not send code.');
         return;
       }
-      setPhone(res.phone_number || normalized);
-      setOtpPanelOpen(true);
-      setPhoneStatus(`Verification code sent to ${normalized}.`);
-      if (res.dev_code) setDevCode(res.dev_code);
-      else setDevCode('');
+      setEmailOtpOpen(true);
+      setEmailStatus(`Verification code sent to ${normalized}.`);
+      if (res.dev_code) setEmailDevCode(res.dev_code);
+      else setEmailDevCode('');
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Could not send code.');
     } finally {
-      setSendingCode(false);
+      setSendingEmailCode(false);
     }
   };
 
-  const handleVerifyCode = async () => {
+  const handleVerifyEmailCode = async () => {
     setError(null);
-    if (!otpCode.trim()) {
+    if (!emailOtpCode.trim()) {
       setError('Enter the verification code.');
       return;
     }
-    setVerifyingCode(true);
+    setVerifyingEmailCode(true);
     try {
-      const res = await verifyPhoneCodeApi(phone.trim(), otpCode.trim());
+      const res = await verifyEmailCodeApi(email.trim().toLowerCase(), emailOtpCode.trim());
       if (!res.ok) {
         setError(res.error || 'Verification failed.');
         return;
       }
-      setPhoneVerified(true);
-      setVerifiedPhone(phone.trim());
-      setOtpPanelOpen(false);
-      setPhoneStatus('Phone number verified.');
+      setEmailVerified(true);
+      setVerifiedEmail(email.trim().toLowerCase());
+      setEmailOtpOpen(false);
+      setEmailStatus('Email address verified.');
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Verification failed.');
     } finally {
-      setVerifyingCode(false);
+      setVerifyingEmailCode(false);
     }
   };
 
@@ -211,8 +210,8 @@ export default function AuthPage() {
       setError('Please enter a valid email address.');
       return;
     }
-    if (!phoneVerified || verifiedPhone !== phone.trim()) {
-      setError('Verify this phone number with the SMS code before creating your account.');
+    if (!emailVerified || verifiedEmail !== email.trim().toLowerCase()) {
+      setError('Verify this email address with the code before creating your account.');
       return;
     }
     if (!placeName || !latitude || !longitude) {
@@ -333,7 +332,7 @@ export default function AuthPage() {
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <label className="block text-xs font-medium text-slate-300">Password</label>
-                    <a href="#" className="text-xs font-medium text-slate-400 transition hover:text-lime-400">Forgot password?</a>
+                    <a href="http://127.0.0.1:8000/password-reset/" target="_blank" rel="noopener" className="text-xs font-medium text-slate-400 transition hover:text-lime-400">Forgot password?</a>
                   </div>
                   <div className="relative">
                     <input
@@ -464,7 +463,19 @@ export default function AuthPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-2 block text-xs font-medium text-slate-300">Email address</label>
-                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={INPUT_CLASS} placeholder="you@example.com" autoComplete="email" />
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <div className="min-w-0 flex-1">
+                          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); if (emailVerified) { setEmailVerified(false); setVerifiedEmail(''); } }} className={INPUT_CLASS} placeholder="you@example.com" autoComplete="email" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSendEmailCode}
+                          disabled={sendingEmailCode || isBusy || !EMAIL_REGEX.test(email.trim()) || emailVerified}
+                          className="shrink-0 rounded-xl border border-lime-400/40 bg-lime-400/10 px-4 py-3 text-xs font-semibold text-lime-400 transition hover:bg-lime-400/20 focus:outline-none focus:ring-2 focus:ring-lime-400/30 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {sendingEmailCode ? 'Sending...' : emailVerified ? 'Verified' : 'Send code'}
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="mb-2 block text-xs font-medium text-slate-300">Gender</label>
@@ -481,58 +492,50 @@ export default function AuthPage() {
 
                   <div>
                     <label className="mb-2 block text-xs font-medium text-slate-300">Phone number</label>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <div className="min-w-0 flex-1">
-                        <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={INPUT_CLASS} placeholder="+919876543210" autoComplete="tel" />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleSendCode}
-                        disabled={sendingCode || isBusy}
-                        className="shrink-0 rounded-xl border border-lime-400/40 bg-lime-400/10 px-4 py-3 text-xs font-semibold text-lime-400 transition hover:bg-lime-400/20 focus:outline-none focus:ring-2 focus:ring-lime-400/30 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {sendingCode ? 'Sending...' : 'Send code'}
-                      </button>
-                    </div>
+                    <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className={INPUT_CLASS} placeholder="+919876543210" autoComplete="tel" />
+                    <p className="mt-2 text-[10px] text-slate-600">Optional. Used for contact only.</p>
+                  </div>
 
+                  <div>
+                    <label className="mb-2 block text-xs font-medium text-slate-300">Email verification status</label>
                     <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-[11px] leading-5 text-slate-400">{phoneStatus}</p>
-                        {phoneVerified && (
+                        <p className="text-[11px] leading-5 text-slate-400">{emailStatus}</p>
+                        {emailVerified && (
                           <span className="inline-flex items-center gap-1 rounded-full border border-lime-400/30 bg-lime-400/10 px-2.5 py-1 font-data text-[9px] uppercase tracking-wider text-lime-400">
                             Verified
                           </span>
                         )}
                       </div>
 
-                      {otpPanelOpen && (
+                      {emailOtpOpen && (
                         <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
                           <input
                             type="text"
                             inputMode="numeric"
                             pattern="[0-9]*"
                             maxLength={6}
-                            value={otpCode}
-                            onChange={(e) => setOtpCode(e.target.value)}
+                            value={emailOtpCode}
+                            onChange={(e) => setEmailOtpCode(e.target.value)}
                             placeholder="6-digit code"
                             className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-center font-data text-sm tracking-[0.3em] text-white outline-none transition focus:border-lime-400/70 focus:ring-2 focus:ring-lime-400/20"
                           />
                           <button
                             type="button"
-                            onClick={handleVerifyCode}
-                            disabled={verifyingCode}
+                            onClick={handleVerifyEmailCode}
+                            disabled={verifyingEmailCode}
                             className="rounded-xl border border-lime-400/40 bg-lime-400/15 px-4 py-3 text-xs font-semibold text-lime-400 transition hover:bg-lime-400/25 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {verifyingCode ? 'Verifying...' : 'Verify'}
+                            {verifyingEmailCode ? 'Verifying...' : 'Verify'}
                           </button>
                         </div>
                       )}
 
-                      {devCode && (
-                        <p className="mt-3 font-data text-[10px] text-amber-400">Dev code: {devCode}</p>
+                      {emailDevCode && (
+                        <p className="mt-3 font-data text-[10px] text-amber-400">Dev code: {emailDevCode}</p>
                       )}
                       <p className="mt-2 text-[10px] leading-4 text-slate-600">
-                        {phoneVerified ? 'Phone verified.' : "We'll send a 6-digit verification code."}
+                        {emailVerified ? 'Email verified.' : "We'll send a 6-digit verification code to your email."}
                       </p>
                     </div>
                   </div>

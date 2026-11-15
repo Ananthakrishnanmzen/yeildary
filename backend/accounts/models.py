@@ -50,6 +50,7 @@ class FarmerProfile(models.Model):
         validators=[phone_validator],
     )
     phone_verified = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=False)
     name = models.CharField(max_length=150, blank=True, default='')
     place_name = models.CharField(max_length=255, blank=True, default='')
     latitude = models.DecimalField(max_digits=9, decimal_places=6)

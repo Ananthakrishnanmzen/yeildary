@@ -34,3 +34,26 @@ class PhoneVerification(models.Model):
 
     def __str__(self):
         return f'{self.phone_number} ({"used" if self.consumed_at else "pending"})'
+
+
+class EmailVerification(models.Model):
+    """Short-lived email verification challenge tied to a browser session."""
+
+    email = models.EmailField(db_index=True)
+    session_key = models.CharField(max_length=40, db_index=True)
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['email', 'session_key', 'consumed_at']),
+        ]
+        verbose_name = 'Email verification'
+        verbose_name_plural = 'Email verifications'
+
+    def __str__(self):
+        return f'{self.email} ({"used" if self.consumed_at else "pending"})'
