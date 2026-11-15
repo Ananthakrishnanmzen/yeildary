@@ -14,9 +14,9 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 FALLBACK_MODELS = [
-    'gemini-2.0-flash',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash',
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.8-flash',
 ]
 
 

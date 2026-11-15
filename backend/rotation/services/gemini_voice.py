@@ -91,16 +91,17 @@ def handle_gemini_voice_conversation(
             f"\n\n[FARMER PROFILE, TELEMETRY, SOIL & ROTATION DATA FROM DATABASE]\n"
             f"The inquiring farmer's real-time farm records, satellite telemetry, land problems, and crop improvement diagnostics from the database are:\n"
             f"{farmer_json}\n\n"
-            f"CRITICAL OPERATING INSTRUCTION FOR DIRECT & INDIRECT FARM INQUIRIES:\n"
-            f"1. DIRECT INQUIRIES (e.g., 'What crops do I grow?', 'How much land do I have?', 'Where is my farm?'):\n"
-            f"   - Directly state registered crops ({farmer_context.get('crops_grown')}), land acreage ({farmer_context.get('farm_area_acres')} acres), and location ({farmer_context.get('location')}).\n"
-            f"2. INDIRECT INQUIRIES ABOUT LAND PROBLEMS (e.g., 'What is the problem on my land?', 'Is my soil damaged?', 'Why is my yield dropping?', 'Any risks or issues on my field?'):\n"
-            f"   - You MUST diagnose their field using the fetched database records above: analyze the active telemetry alerts, water stress index, slope degrees, erosion risk score, and continuous cropping vulnerabilities for their crops ({farmer_context.get('crops_grown')}).\n"
-            f"   - Give an empathetic, clear diagnostic breakdown in {lang_display} explaining what challenges were detected on their land.\n"
-            f"3. INDIRECT INQUIRIES ABOUT CROP IMPROVEMENT (e.g., 'How can I improve my crop growing?', 'How to increase yield?', 'How to boost soil health?', 'What should I plant next?'):\n"
-            f"   - You MUST recommend actionable, tailored agronomic improvement steps using their database rotation plans ({farmer_context.get('rotation_strategy')}): such as rotating with nitrogen-fixing green gram or sunn hemp cover crops to increase soil health by 40%, organic contour mulching for slope erosion, and water-saving irrigation.\n"
-            f"   - Keep advice conversational, highly encouraging, practical, and clear in {lang_display}.\n"
-            f"4. Never contradict or ignore these verified database farm records."
+            f"CRITICAL OPERATING INSTRUCTION FOR COMBINING AI KNOWLEDGE WITH FARMER DATABASE RECORDS:\n"
+            f"1. ANSWER THE USER'S ACTUAL QUESTION THOROUGHLY: Always address the specific query asked by the user with full practical steps and dosages. Do not output a bare database profile dump.\n"
+            f"2. CONTEXTUALIZE ADVICE TO THEIR REGISTERED CROPS & LOCATION:\n"
+            f"   - When answering crop management, disease, fertilizer, soil, or pest questions, synthesize your agricultural intelligence with the farmer's registered crops ({farmer_context.get('crops_grown')}), total land ({farmer_context.get('farm_area_acres')} acres), and location ({farmer_context.get('location')}) from the database.\n"
+            f"3. DIRECT FARM INQUIRIES (e.g., 'What crops do I grow?', 'How much land do I have?', 'Where is my farm?'):\n"
+            f"   - State their registered crops ({farmer_context.get('crops_grown')}), land acreage ({farmer_context.get('farm_area_acres')} acres), and location ({farmer_context.get('location')}) directly from the database, and provide tailored agronomic recommendations for those crops.\n"
+            f"4. INDIRECT INQUIRIES ABOUT LAND PROBLEMS (e.g., 'What is the problem on my land?', 'Is my soil damaged?', 'Why is my yield dropping?', 'Any risks or issues on my field?'):\n"
+            f"   - Combine your agronomic expertise with their database telemetry and soil records (water stress index, slope degrees, erosion risk score, single-cropping vulnerability for {farmer_context.get('crops_grown')}). Diagnose the challenges on their land in {farmer_context.get('location')} and give practical solutions in {lang_display}.\n"
+            f"5. INDIRECT INQUIRIES ABOUT CROP IMPROVEMENT (e.g., 'How can I improve my crop growing?', 'How to increase yield?', 'How to boost soil health?', 'What should I plant next?'):\n"
+            f"   - Combine your agricultural knowledge with their database rotation plans ({farmer_context.get('rotation_strategy')}) and crops ({farmer_context.get('crops_grown')}). Recommend actionable cover cropping (e.g., rotating with green gram / sunn hemp to boost soil health by 40%), organic contour mulching, and water management suited to their land in {farmer_context.get('location')}.\n"
+            f"6. Never contradict or ignore these verified database farm records."
         )
 
     if kb_context:
@@ -117,26 +118,28 @@ def handle_gemini_voice_conversation(
         )
         system_instruction += (
             f"\n\n[SELECTED VERIFIED KNOWLEDGE BASE CONTEXT]\n"
-            f"The user inquiry directly matches a verified entry in our regional Agricultural Knowledge Base.\n"
+            f"The user inquiry matches a verified entry in our regional Agricultural Knowledge Base.\n"
             f"- Topic/Intent: {intent_info}\n"
             f"- Verified Reference Advice & Dosages: {ref_text}\n"
             f"- Associated Reference Query: {sample_q}\n\n"
-            f"OPERATING INSTRUCTION: Answer this question with the help of your agricultural intelligence AND the selected verified knowledge base provided above. "
-            f"Incorporate the verified dosages, scientific fungicides/bio-fertilizers, and government guidelines from the knowledge base, "
-            f"while formulating a warm, helpful, and natural spoken response in {lang_display}. "
-            f"Ensure detected_intent reflects '{intent_info}'."
+            f"OPERATING INSTRUCTION: Answer this question with the help of your agricultural intelligence AND the selected verified knowledge base provided above, COMBINED with the farmer's database context.\n"
+            f"- Incorporate the verified dosages, scientific fungicides/bio-fertilizers, organic solutions, or scheme benefits from the knowledge base.\n"
+            f"- Contextualize the guidance for the farmer's actual crops ({farmer_context.get('crops_grown') if farmer_context else 'regional crops'}) and land conditions in {farmer_context.get('location') if farmer_context else 'the region'}.\n"
+            f"- Formulate a warm, helpful, and natural spoken response in {lang_display}.\n"
+            f"- Ensure detected_intent reflects '{intent_info}'."
         )
     else:
         system_instruction += (
             f"\n\n[DIRECT AUTONOMOUS AGRICULTURAL KNOWLEDGE MODE - OUTSIDE KB]\n"
             f"The user's question is NOT in the pre-stored regional knowledge base.\n"
-            f"OPERATING INSTRUCTION: You MUST answer this question directly, fully, and comprehensively from your own vast agricultural, crop science, plant pathology, entomology, soil chemistry, climate adaptation, irrigation, and agronomic knowledge in {lang_display}.\n"
+            f"OPERATING INSTRUCTION: You MUST answer this question directly, fully, and comprehensively from your own vast agricultural, crop science, plant pathology, entomology, soil chemistry, climate adaptation, irrigation, and agronomic knowledge in {lang_display}, combined with the farmer's database context if available.\n"
             f"Do not give generic disclaimers or say you do not know. Provide clear, practical, expert recommendations including specific crop treatments, organic solutions, watering practices, or nutrient schedules suitable for Indian agriculture in {lang_display}."
         )
 
     configured_model = getattr(settings, "GEMINI_MODEL", "") or os.environ.get("GEMINI_MODEL", "").strip()
     models_to_try: List[str] = []
-    for candidate in [configured_model, *FALLBACK_MODELS]:
+    preferred_models = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
+    for candidate in [configured_model, *preferred_models, *FALLBACK_MODELS]:
         if candidate and candidate not in models_to_try:
             models_to_try.append(candidate)
 

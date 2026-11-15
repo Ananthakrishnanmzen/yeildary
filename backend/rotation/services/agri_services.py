@@ -1515,272 +1515,168 @@ def process_voice_query(
         logger.warning("AI voice processing failed, falling back to local handler: %s", exc)
 
     # 4. Resilient fallback if AI is offline or API key missing
-
     q_lower = (query_text or "").lower()
 
-    # Indirect problem / challenge query tokens
-
-    problem_tokens = [
-
-        "problem", "issue", "trouble", "wrong", "risk", "damage", "disease",
-
-        "പ്രശ്നം", "കേട്", "രോഗം", "ബുദ്ധിമുട്ട്",
-
-        "समस्या", "दिक्कत", "खराबी", "नुकसान", "बीमारी"
-
-    ]
-
-    # Indirect improvement / yield query tokens
-
-    improve_tokens = [
-
-        "improve", "increase", "boost", "grow better", "yield", "better crop", "fertilizer", "manure", "healthy", "rotation",
-
-        "മെച്ചപ്പെടുത്താൻ", "വിളവ്", "വളർച്ച", "കൂട്ടാൻ", "വളം",
-
-        "सुधार", "पैदावार", "उपज", "बढ़ाएं", "खाद", "उर्वरक"
-
-    ]
-
-    # Direct farm identity tokens
-
-    farm_id_tokens = [
-
-        "my farm", "my land", "my crop", "crops grown", "acre", "land size", "what crops",
-
-        "നിലവിലെ വിളകൾ", "ഭൂമി", "വിള", "ഏക്കർ", "സ്ഥലം",
-
-        "खेत", "फसल", "जमीन", "एकड़", "मेरी फसलें"
-
-    ]
-
-    land_keywords = ["land", "farm", "soil", "field", "crop", "growing", "plot", "ഭൂമി", "മണ്ണ്", "വിള", "തോട്ടം", "കൃഷി", "खेत", "जमीन", "फसल", "मिट्टी"]
-
-    is_problem_query = any(p in q_lower for p in problem_tokens) and any(k in q_lower for k in land_keywords)
-
-    is_improve_query = any(i in q_lower for i in improve_tokens) and any(k in q_lower for k in land_keywords)
-
-    is_farm_query = any(tok in q_lower for tok in farm_id_tokens)
-
-    if is_problem_query and farmer_context:
-
-        name = farmer_context.get("farmer_name", "")
-
-        acres = farmer_context.get("farm_area_acres", "5.0")
-
-        crops = ", ".join(farmer_context.get("crops_grown", [])) or "Wheat, Rice"
-
-        loc = farmer_context.get("location", "")
-
-        if lang == "ml":
-
-            answer = (
-
-                f"നിങ്ങളുടെ ഡാറ്റാബേസ് റിപ്പോർട്ട് പ്രകാരം {loc}-ലെ {acres} ഏക്കർ സ്ഥലത്ത് ({crops}) താഴെ പറയുന്ന വെല്ലുവിളികൾ കണ്ടെത്തിയിട്ടുണ്ട്: "
-
-                "1. ജലസമ്മർദ്ദം (Water Stress Index ~35) അനുഭവപ്പെടുന്നു; വേനൽക്കാലത്ത് ജലനഷ്ടം തടയാൻ പുതയിടൽ ആവശ്യമാണ്. "
-
-                "2. ചെരിവുള്ള ഭൂമിയിൽ കനത്ത മഴയത്ത് മേൽമണ്ണൊലിപ്പ് സാധ്യത (Erosion Risk 30/100) കാണുന്നു. "
-
-                "3. ഒരേ വിളകൾ തുടർച്ചയായി കൃഷി ചെയ്യുന്നത് മണ്ണിന്റെ സൂക്ഷ്മ പോഷകങ്ങൾ കുറയ്ക്കാൻ സാധ്യതയുണ്ട്."
-
-            )
-
-            translated_en = (
-
-                f"According to database records for your {acres} acres in {loc} ({crops}): "
-
-                "1. Moderate water stress (Index ~35), requiring soil moisture mulching. "
-
-                "2. Slope terrain poses topsoil erosion risk during heavy rains. "
-
-                "3. Continuous single-cropping risks micronutrient depletion and soil fatigue."
-
-            )
-
-        elif lang == "hi":
-
-            answer = (
-
-                f"डेटाबेस और टेलीमेट्री रिकॉर्ड के अनुसार {loc} में आपकी {acres} एकड़ जमीन ({crops}) की मुख्य समस्याएं: "
-
-                "1. वाटर स्ट्रेस इंडेक्स ~35 पाया गया है, जिससे नमी बनाए रखने हेतु मल्चिंग जरूरी है. "
-
-                "2. ढलान वाली भूमि पर भारी बारिश में ऊपरी मिट्टी के कटाव (Erosion Risk 30/100) का जोखिम है. "
-
-                "3. एक ही फसल लगातार उगाने से मिट्टी के पोषक तत्वों में कमी और कीट चक्र का जोखिम रहता है."
-
-            )
-
-            translated_en = (
-
-                f"According to database records for your {acres} acres in {loc} ({crops}): "
-
-                "1. Water stress index is ~35, requiring moisture conservation. "
-
-                "2. Slope topography poses topsoil runoff risk during rains. "
-
-                "3. Monoculture without legume rotation depletes soil nutrients."
-
-            )
-
-        else:
-
-            answer = (
-
-                f"Based on your farm land records for your {acres} acres in {loc} growing {crops}: "
-
-                "1. Water Stress Index is at ~35, indicating a need for moisture retention and organic mulching. "
-
-                "2. Moderate slope presents topsoil erosion risk (30/100) during heavy precipitation events. "
-
-                "3. Continuous cropping of {crops} without legume alternation reduces soil organic nitrogen and increases pest pressure."
-
-            )
-
-            translated_en = answer
-
-        intent = "Farm Land Diagnostics"
-
-    elif is_improve_query and farmer_context:
-
-        name = farmer_context.get("farmer_name", "")
-
-        acres = farmer_context.get("farm_area_acres", "5.0")
-
-        crops = ", ".join(farmer_context.get("crops_grown", [])) or "Wheat, Rice"
-
-        loc = farmer_context.get("location", "")
-
-        if lang == "ml":
-
-            answer = (
-
-                f"നിങ്ങളുടെ {acres} ഏക്കർ സ്ഥലത്ത് വിളവും മണ്ണും മെച്ചപ്പെടുത്താൻ ഡാറ്റാബേസ് അടിസ്ഥാനത്തിലുള്ള നിർദ്ദേശങ്ങൾ: "
-
-                "1. വിളവെടുപ്പിന് ശേഷം ചെറുപയറോ ചണമ്പോ ആവരണവിളയായി (Cover crop) കൃഷി ചെയ്യുക; ഇത് മണ്ണിന്റെ ഫലപുഷ്ടി 40% വരെ വർദ്ധിപ്പിക്കും. "
-
-                "2. ചെരിവുള്ള ഭാഗങ്ങളിൽ കോണ്ടൂർ പുതയിടൽ (Contour mulching) നടപ്പിലാക്കി മേൽമണ്ണ് സംരക്ഷിക്കുക. "
-
-                "3. വരണ്ട കാലാവസ്ഥയിൽ ബാജ്റ, കടല തുടങ്ങിയ കുറഞ്ഞ ജലആവശ്യമുള്ള വിളകൾ ഉൾപ്പെടുത്തി ജലകാര്യക്ഷമത 89%-ലേക്ക് ഉയർത്തുക."
-
-            )
-
-            translated_en = (
-
-                f"To improve crop growing on your {acres} acres in {loc}: "
-
-                "1. Rotate or intercrop with Green Gram or Sunn Hemp cover crops to boost soil health by 40%. "
-
-                "2. Practice contour mulching on slope sections to arrest runoff. "
-
-                "3. Integrate low-ET water-saving crops like Bajra or Chickpea to increase water efficiency to 89%."
-
-            )
-
-        elif lang == "hi":
-
-            answer = (
-
-                f"आपकी {acres} एकड़ जमीन पर फसल की पैदावार और मिट्टी की सेहत सुधारने के सुझाव: "
-
-                "1. फसलों के बीच मूंग या सनई (Sunn Hemp) जैसी हरी खाद की फसल लगाएं, जिससे मिट्टी की सेहत 40% तक सुधरेगी. "
-
-                "2. ढलान पर नमी रोकने और मिट्टी के कटाव से बचाव के लिए मल्चिंग अपनाएं. "
-
-                "3. पानी की बचत के लिए बाजरा या चना जैसी कम पानी वाली दलहनी फसलों को चक्र में शामिल कर जल दक्षता 89% करें."
-
-            )
-
-            translated_en = (
-
-                f"To improve crop growing on your {acres} acres in {loc}: "
-
-                "1. Plant green manure cover crops like Green Gram or Sunn Hemp to improve soil health by up to 40%. "
-
-                "2. Use organic mulching on slopes to retain moisture and stop topsoil erosion. "
-
-                "3. Rotate with low-ET crops like Bajra or Chickpea to reach 89% water efficiency."
-
-            )
-
-        else:
-
-            answer = (
-
-                f"To improve crop growing and yield on your {acres} acres in {loc} ({crops}): "
-
-                "1. Rotate after {crops} with nitrogen-fixing Green Gram or Sunn Hemp cover crops to boost soil health impact by +40%. "
-
-                "2. Practice organic contour mulching across slopes to prevent runoff and retain rootzone moisture. "
-
-                "3. In drier periods, integrate low-ET water-saving rotation crops like Bajra or Chickpea to boost water efficiency to 89%."
-
-            )
-
-            translated_en = answer
-
-        intent = "Crop Improvement Strategy"
-
-    elif is_farm_query and farmer_context:
-
-        name = farmer_context.get("farmer_name", "")
-
-        acres = farmer_context.get("farm_area_acres", "5.0")
-
-        crops = ", ".join(farmer_context.get("crops_grown", [])) or "Wheat, Rice"
-
-        loc = farmer_context.get("location", "")
-
-        if lang == "ml":
-
-            answer = f"നിങ്ങളുടെ ഡാറ്റാബേസ് വിവരങ്ങൾ പ്രകാരം: കർഷകൻ: {name}, കൃഷിസ്ഥലം: {loc}, വിസ്തൃതി: {acres} ഏക്കർ. നിലവിൽ രജിസ്റ്റർ ചെയ്തിരിക്കുന്ന വിളകൾ: {crops}."
-
-            translated_en = f"According to your database records: Farmer: {name}, Location: {loc}, Total Area: {acres} acres. Registered crops: {crops}."
-
-        elif lang == "hi":
-
-            answer = f"डेटाबेस रिकॉर्ड के अनुसार: किसान: {name}, स्थान: {loc}, कुल भूमि: {acres} एकड़। वर्तमान में पंजीकृत फसलें: {crops}."
-
-            translated_en = f"According to your database records: Farmer: {name}, Location: {loc}, Total Area: {acres} acres. Registered crops: {crops}."
-
-        else:
-
-            answer = f"According to your farm records in the database: Farmer: {name}, Location: {loc}, Total Area: {acres} acres. Registered Crops: {crops}."
-
-            translated_en = answer
-
-        intent = "Farm Land & Crop Records"
-
-    elif selected_kb:
-
-        answer = selected_kb.get(f"answer_{lang}", selected_kb["answer_en"])
-
-        translated_en = selected_kb["answer_en"]
-
+    # Prioritize Selected Knowledge Base query combined with Farmer DB Context
+    if selected_kb:
+        base_ans = selected_kb.get(f"answer_{lang}", selected_kb["answer_en"])
         intent = selected_kb["intent"]
+        translated_en = selected_kb["answer_en"]
+        if farmer_context:
+            loc = farmer_context.get("location", "")
+            crops = ", ".join(farmer_context.get("crops_grown", [])) or "Wheat, Rice"
+            acres = farmer_context.get("farm_area_acres", "5.0")
+            if lang == "ml":
+                answer = f"{base_ans} (നിങ്ങളുടെ {loc}-ലെ {acres} ഏക്കർ കൃഷിയിടത്തിൽ ({crops}) ഈ ശാസ്ത്രീയ നിർദ്ദേശങ്ങൾ ഫലപ്രദമായി നടപ്പിലാക്കാവുന്നതാണ്.)"
+            elif lang == "hi":
+                answer = f"{base_ans} ({loc} में आपके {acres} एकड़ खेत ({crops}) पर यह वैज्ञानिक सलाह प्रभावी रूप से लागू की जा सकती है।)"
+            else:
+                answer = f"{base_ans} (This scientific advisory can be effectively applied to your {acres} acres in {loc} growing {crops}.)"
+        else:
+            answer = base_ans
 
     else:
+        # Indirect problem / challenge query tokens
+        problem_tokens = [
+            "problem on my land", "problem on my field", "issue with soil", "damage on my crop",
+            "what is the problem", "whats the problem", "disease on my farm",
+            "എന്റെ ഭൂമിയിലെ പ്രശ്നം", "എന്റെ കൃഷിയിടത്തിൽ എന്ത് പ്രശ്നം", "മണ്ണിൽ പ്രശ്നം", "രോഗബാധ", "കേട്", "ബുദ്ധിമുട്ട്",
+            "खेत में समस्या", "जमीन में खराबी", "फसल में बीमारी", "क्या समस्या है"
+        ]
+        # Indirect improvement / yield query tokens
+        improve_tokens = [
+            "how can improve", "improve my crop", "increase yield", "boost soil", "grow better",
+            "എങ്ങനെ മെച്ചപ്പെടുത്താം", "വിളവ് കൂട്ടാൻ", "വളർച്ച കൂട്ടാൻ", "മണ്ണ് മെച്ചപ്പെടുത്താൻ",
+            "कैसे सुधारें", "पैदावार बढ़ाएं", "उपज बढ़ाएं", "मिट्टी सुधार"
+        ]
+        # Direct farm identity tokens (strictly multi-word phrases to avoid catching common words like vila)
+        farm_id_tokens = [
+            "my farm", "my land", "my crops", "crops grown on my farm", "what crops do i grow",
+            "how many acres", "how much land", "land acreage", "acreage", "acre", "my registered crops", "land size", "farm size",
+            "എന്റെ ഫാം", "എന്റെ കൃഷിഭൂമി", "എന്റെ രജിസ്റ്റർ ചെയ്ത വിളകൾ", "എന്റെ ഭൂമി വിവരങ്ങൾ", "എന്റെ വിളകൾ",
+            "എത്ര ഏക്കർ", "എന്റെ തോട്ടം വിവരങ്ങൾ",
+            "मेरी जमीन", "मेरी फसलें", "पंजीकृत फसलें", "मेरे खेत का विवरण", "कितनी जमीन"
+        ]
+        land_keywords = ["land", "farm", "soil", "field", "crop", "growing", "plot", "ഭൂമി", "മണ്ണ്", "വിള", "തോട്ടം", "കൃഷി", "खेत", "जमीन", "फसल", "मिट्टी"]
+        is_problem_query = any(p in q_lower for p in problem_tokens) or (any(w in q_lower for w in ["problem", "issue", "damage", "പ്രശ്നം", "കേട്", "समस्या"]) and any(k in q_lower for k in land_keywords))
+        is_improve_query = any(i in q_lower for i in improve_tokens) or (any(w in q_lower for w in ["improve", "boost", "മെച്ചപ്പെടുത്താൻ", "കൂട്ടാൻ", "सुधार"]) and any(k in q_lower for k in land_keywords))
+        is_farm_query = any(tok in q_lower for tok in farm_id_tokens)
 
-        intent = "General Agricultural Inquiry"
-
-        if lang == "ml":
-
-            answer = "നിങ്ങളുടെ കാർഷിക ചോദ്യം ലഭിച്ചു. കൂടുതൽ വിശദാംശങ്ങൾക്കായി ദയവായി നിങ്ങളുടെ വിളയുടെ പേരും ലക്ഷണങ്ങളും വ്യക്തമാക്കൂ."
-
-            translated_en = "Your agricultural question has been received. Please specify crop name and symptoms."
-
-        elif lang == "hi":
-
-            answer = "आपका कृषि संबंधी प्रश्न प्राप्त हुआ। सटीक सलाह हेतु कृपया फसल का नाम और लक्षण स्पष्ट करें।"
-
-            translated_en = "Your agricultural question has been received. Please clarify crop name and symptoms."
-
+        if is_problem_query and farmer_context:
+            name = farmer_context.get("farmer_name", "")
+            acres = farmer_context.get("farm_area_acres", "5.0")
+            crops = ", ".join(farmer_context.get("crops_grown", [])) or "Wheat, Rice"
+            loc = farmer_context.get("location", "")
+            if lang == "ml":
+                answer = (
+                    f"നിങ്ങളുടെ ഡാറ്റാബേസ് റിപ്പോർട്ട് പ്രകാരം {loc}-ലെ {acres} ഏക്കർ സ്ഥലത്ത് ({crops}) താഴെ പറയുന്ന വെല്ലുവിളികൾ കണ്ടെത്തിയിട്ടുണ്ട്: "
+                    "1. ജലസമ്മർദ്ദം (Water Stress Index ~35) അനുഭവപ്പെടുന്നു; വേനൽക്കാലത്ത് ജലനഷ്ടം തടയാൻ പുതയിടൽ ആവശ്യമാണ്. "
+                    "2. ചെരിവുള്ള ഭൂമിയിൽ കനത്ത മഴയത്ത് മേൽമണ്ണൊലിപ്പ് സാധ്യത (Erosion Risk 30/100) കാണുന്നു. "
+                    "3. ഒരേ വിളകൾ തുടർച്ചയായി കൃഷി ചെയ്യുന്നത് മണ്ണിന്റെ സൂക്ഷ്മ പോഷകങ്ങൾ കുറയ്ക്കാൻ സാധ്യതയുണ്ട്."
+                )
+                translated_en = (
+                    f"According to database records for your {acres} acres in {loc} ({crops}): "
+                    "1. Moderate water stress (Index ~35), requiring soil moisture mulching. "
+                    "2. Slope terrain poses topsoil erosion risk during heavy rains. "
+                    "3. Continuous single-cropping risks micronutrient depletion and soil fatigue."
+                )
+            elif lang == "hi":
+                answer = (
+                    f"डेटाबेस और टेलीमेट्री रिकॉर्ड के अनुसार {loc} में आपकी {acres} एकड़ जमीन ({crops}) की मुख्य समस्याएं: "
+                    "1. वाटर स्ट्रेस इंडेक्स ~35 पाया गया है, जिससे नमी बनाए रखने हेतु मल्चिंग जरूरी है. "
+                    "2. ढलान वाली भूमि पर भारी बारिश में ऊपरी मिट्टी के कटाव (Erosion Risk 30/100) का जोखिम है. "
+                    "3. एक ही फसल लगातार उगाने से मिट्टी के पोषक तत्वों में कमी और कीट चक्र का जोखिम रहता है."
+                )
+                translated_en = (
+                    f"According to database records for your {acres} acres in {loc} ({crops}): "
+                    "1. Water stress index is ~35, requiring moisture conservation. "
+                    "2. Slope topography poses topsoil runoff risk during rains. "
+                    "3. Monoculture without legume rotation depletes soil nutrients."
+                )
+            else:
+                answer = (
+                    f"Based on your farm land records for your {acres} acres in {loc} growing {crops}: "
+                    "1. Water Stress Index is at ~35, indicating a need for moisture retention and organic mulching. "
+                    "2. Moderate slope presents topsoil erosion risk (30/100) during heavy precipitation events. "
+                    "3. Continuous cropping of {crops} without legume alternation reduces soil organic nitrogen and increases pest pressure."
+                )
+                translated_en = answer
+            intent = "Farm Land Diagnostics"
+        elif is_improve_query and farmer_context:
+            name = farmer_context.get("farmer_name", "")
+            acres = farmer_context.get("farm_area_acres", "5.0")
+            crops = ", ".join(farmer_context.get("crops_grown", [])) or "Wheat, Rice"
+            loc = farmer_context.get("location", "")
+            if lang == "ml":
+                answer = (
+                    f"നിങ്ങളുടെ {acres} ഏക്കർ സ്ഥലത്ത് ({crops}) വിളവും മണ്ണും മെച്ചപ്പെടുത്താൻ ഡാറ്റാബേസ് അടിസ്ഥാനത്തിലുള്ള നിർദ്ദേശങ്ങൾ: "
+                    "1. വിളവെടുപ്പിന് ശേഷം ചെറുപയറോ ചണമ്പോ ആവരണവിളയായി (Cover crop) കൃഷി ചെയ്യുക; ഇത് മണ്ണിന്റെ ഫലപുഷ്ടി 40% വരെ വർദ്ധിപ്പിക്കും. "
+                    "2. ചെരിവുള്ള ഭാഗങ്ങളിൽ കോണ്ടൂർ പുതയിടൽ (Contour mulching) നടപ്പിലാക്കി മേൽമണ്ണ് സംരക്ഷിക്കുക. "
+                    "3. വരണ്ട കാലാവസ്ഥയിൽ ബാജ്റ, കടല തുടങ്ങിയ കുറഞ്ഞ ജലആവശ്യമുള്ള വിളകൾ ഉൾപ്പെടുത്തി ജലകാര്യക്ഷമത 89%-ലേക്ക് ഉയർത്തുക."
+                )
+                translated_en = (
+                    f"To improve crop growing on your {acres} acres in {loc}: "
+                    "1. Rotate or intercrop with Green Gram or Sunn Hemp cover crops to boost soil health by 40%. "
+                    "2. Practice contour mulching on slope sections to arrest runoff. "
+                    "3. Integrate low-ET water-saving crops like Bajra or Chickpea to increase water efficiency to 89%."
+                )
+            elif lang == "hi":
+                answer = (
+                    f"आपकी {acres} एकड़ जमीन ({crops}) पर फसल की पैदावार और मिट्टी की सेहत सुधारने के सुझाव: "
+                    "1. फसलों के बीच मूंग या सनई (Sunn Hemp) जैसी हरी खाद की फसल लगाएं, जिससे मिट्टी की सेहत 40% तक सुधरेगी. "
+                    "2. ढलान पर नमी रोकने और मिट्टी के कटाव से बचाव के लिए मल्चिंग अपनाएं. "
+                    "3. पानी की बचत के लिए बाजरा या चना जैसी कम पानी वाली दलहनी फसलों को चक्र में शामिल कर जल दक्षता 89% करें."
+                )
+                translated_en = (
+                    f"To improve crop growing on your {acres} acres in {loc}: "
+                    "1. Plant green manure cover crops like Green Gram or Sunn Hemp to improve soil health by up to 40%. "
+                    "2. Use organic mulching on slopes to retain moisture and stop topsoil erosion. "
+                    "3. Rotate with low-ET crops like Bajra or Chickpea to reach 89% water efficiency."
+                )
+            else:
+                answer = (
+                    f"To improve crop growing and yield on your {acres} acres in {loc} ({crops}): "
+                    "1. Rotate after {crops} with nitrogen-fixing Green Gram or Sunn Hemp cover crops to boost soil health impact by +40%. "
+                    "2. Practice organic contour mulching across slopes to prevent runoff and retain rootzone moisture. "
+                    "3. In drier periods, integrate low-ET water-saving rotation crops like Bajra or Chickpea to boost water efficiency to 89%."
+                )
+                translated_en = answer
+            intent = "Crop Improvement Strategy"
+        elif is_farm_query and farmer_context:
+            name = farmer_context.get("farmer_name", "")
+            acres = farmer_context.get("farm_area_acres", "5.0")
+            crops = ", ".join(farmer_context.get("crops_grown", [])) or "Wheat, Rice"
+            loc = farmer_context.get("location", "")
+            if lang == "ml":
+                answer = (
+                    f"നിങ്ങളുടെ ഡാറ്റാബേസ് വിവരങ്ങൾ പ്രകാരം: കർഷകൻ: {name}, കൃഷിസ്ഥലം: {loc}, വിസ്തൃതി: {acres} ഏക്കർ. "
+                    f"നിലവിൽ രജിസ്റ്റർ ചെയ്തിരിക്കുന്ന വിളകൾ: {crops}. ഈ വിളകൾക്ക് അനുയോജ്യമായ കാർഷിക നിർദ്ദേശങ്ങൾ സഹായിയിൽ ലഭ്യമാണ്."
+                )
+                translated_en = f"According to your database records: Farmer: {name}, Location: {loc}, Total Area: {acres} acres. Registered crops: {crops}."
+            elif lang == "hi":
+                answer = (
+                    f"डेटाबेस रिकॉर्ड के अनुसार: किसान: {name}, स्थान: {loc}, कुल भूमि: {acres} एकड़। "
+                    f"वर्तमान में पंजीकृत फसलें: {crops}। इन फसलों हेतु उन्नत कृषि परामर्श उपलब्ध है।"
+                )
+                translated_en = f"According to your database records: Farmer: {name}, Location: {loc}, Total Area: {acres} acres. Registered crops: {crops}."
+            else:
+                answer = (
+                    f"According to your farm records in the database: Farmer: {name}, Location: {loc}, Total Area: {acres} acres. "
+                    f"Registered Crops: {crops}. Full agronomic management guidance is available for your registered crops."
+                )
+                translated_en = answer
+            intent = "Farm Land & Crop Records"
         else:
-
-            answer = "Your farm inquiry has been noted. Please share more details regarding your crop, soil, or specific symptoms for a precise recommendation."
-
-            translated_en = answer
+            intent = "General Agricultural Inquiry"
+            if lang == "ml":
+                answer = "നിങ്ങളുടെ കാർഷിക ചോദ്യം ലഭിച്ചു. കൂടുതൽ വിശദാംശങ്ങൾക്കായി ദയവായി നിങ്ങളുടെ വിളയുടെ പേരും ലക്ഷണങ്ങളും വ്യക്തമാക്കൂ."
+                translated_en = "Your agricultural question has been received. Please specify crop name and symptoms."
+            elif lang == "hi":
+                answer = "आपका कृषि संबंधी प्रश्न प्राप्त हुआ। सटीक सलाह हेतु कृपया फसल का नाम और लक्षण स्पष्ट करें।"
+                translated_en = "Your agricultural question has been received. Please clarify crop name and symptoms."
+            else:
+                answer = "Your farm inquiry has been noted. Please share more details regarding your crop, soil, or specific symptoms for a precise recommendation."
+                translated_en = answer
 
     return {
 

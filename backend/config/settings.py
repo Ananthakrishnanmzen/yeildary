@@ -37,7 +37,7 @@ GEMINI_API_KEY = (
     or os.environ.get('VITE_GEMINI_API_KEY')
     or ''
 ).strip()
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash').strip()
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-3.5-flash').strip()
 
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
