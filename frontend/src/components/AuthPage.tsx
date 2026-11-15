@@ -50,7 +50,6 @@ export default function AuthPage() {
   const [emailOtpOpen, setEmailOtpOpen] = useState(false);
   const [emailOtpCode, setEmailOtpCode] = useState('');
   const [emailStatus, setEmailStatus] = useState("We'll send a 6-digit verification code to your email.");
-  const [emailDevCode, setEmailDevCode] = useState('');
   const [sendingEmailCode, setSendingEmailCode] = useState(false);
   const [verifyingEmailCode, setVerifyingEmailCode] = useState(false);
   const [gender, setGender] = useState('');
@@ -125,8 +124,6 @@ export default function AuthPage() {
       }
       setEmailOtpOpen(true);
       setEmailStatus(`Verification code sent to ${normalized}.`);
-      if (res.dev_code) setEmailDevCode(res.dev_code);
-      else setEmailDevCode('');
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Could not send code.');
     } finally {
@@ -531,9 +528,6 @@ export default function AuthPage() {
                         </div>
                       )}
 
-                      {emailDevCode && (
-                        <p className="mt-3 font-data text-[10px] text-amber-400">Dev code: {emailDevCode}</p>
-                      )}
                       <p className="mt-2 text-[10px] leading-4 text-slate-600">
                         {emailVerified ? 'Email verified.' : "We'll send a 6-digit verification code to your email."}
                       </p>
