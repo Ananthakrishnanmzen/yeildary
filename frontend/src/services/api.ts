@@ -15,15 +15,27 @@ import type {
  * `VITE_API_BASE_URL` is the canonical variable and should include the `/api` suffix,
  * e.g. `https://yeildary.onrender.com/api`.
  *
- * `VITE_API_URL` is also accepted (the name used in Render's docs) and is normalised to
- * always end with `/api`. Without either, requests fall back to the same-origin `/api`
- * path, which is what the Vite dev proxy (`vite.config.ts`) targets.
+ * `VITE_API_URL`, `REACT_APP_API_URL`, and `NEXT_PUBLIC_API_URL` are also accepted
+ * and normalised to always end with `/api`. In local development, requests fall back
+ * to the same-origin `/api` path targeted by the Vite dev proxy (`vite.config.ts`).
  */
+const envMeta = import.meta.env as Record<string, string | boolean | undefined>;
 const RAW_API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? '/api';
+  [
+    envMeta.VITE_API_BASE_URL,
+    envMeta.VITE_API_URL,
+    envMeta.REACT_APP_API_URL,
+    envMeta.NEXT_PUBLIC_API_URL,
+  ]
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .find((v) => v.length > 0) ||
+  (import.meta.env.PROD ? 'https://yeildary.onrender.com/api' : '/api');
 
 function normalizeApiBaseUrl(raw: string): string {
-  const trimmed = raw.trim().replace(/\/+$/, '');
+  const trimmed = raw
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/:([^/]+)/g, '/$1');
   if (!trimmed) {
     return '/api';
   }
@@ -53,6 +65,53 @@ export const apiClient = axios.create({
 export const HEALTH_URL = `${BACKEND_BASE_URL}/api/health/`;
 
 /**
+ * Safely coerce any unknown error value (string, Error, Vercel `{ code, message }` object,
+ * DRF validation dictionary, etc.) into a plain string so React never crashes with
+ * Minified React error #31 ("Objects are not valid as a React child").
+ */
+export function toErrorMessage(value: unknown, fallback = 'An unexpected error occurred.'): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.startsWith('<')) {
+      return fallback;
+    }
+    return trimmed;
+  }
+  if (value instanceof Error) {
+    return toErrorMessage(value.message, fallback);
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const msg = toErrorMessage(item, '');
+      if (msg) return msg;
+    }
+    return fallback;
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.message === 'string' && record.message.trim()) {
+      return record.message.trim();
+    }
+    if (typeof record.detail === 'string' && record.detail.trim()) {
+      return record.detail.trim();
+    }
+    if (record.error !== undefined) {
+      const nested = toErrorMessage(record.error, '');
+      if (nested) return nested;
+    }
+    if (record.errors && typeof record.errors === 'object') {
+      const nested = toErrorMessage(Object.values(record.errors as Record<string, unknown>), '');
+      if (nested) return nested;
+    }
+    for (const entry of Object.values(record)) {
+      const nested = toErrorMessage(entry, '');
+      if (nested) return nested;
+    }
+  }
+  return fallback;
+}
+
+/**
  * Turn an API failure into a message the user can act on.
  *
  * API errors are JSON, but a crashed backend or a blocked request produces HTML
@@ -67,37 +126,49 @@ export function describeApiError(err: unknown, fallback: string): string {
         ? (rawData as Record<string, unknown>)
         : undefined;
     if (data) {
-      if (typeof data.detail === 'string') return data.detail;
-      if (typeof data.error === 'string' && data.error) return data.error;
+      if (typeof data.detail === 'string' && data.detail.trim()) return data.detail.trim();
+      if (typeof data.error === 'string' && data.error.trim()) return data.error.trim();
+      if (data.error && typeof data.error === 'object') {
+        const errObj = data.error as Record<string, unknown>;
+        if (typeof errObj.message === 'string' && errObj.message.trim()) {
+          if (err.response?.status === 404) {
+            return `API endpoint not found (404) at ${API_BASE_URL}. Ensure VITE_API_BASE_URL points to your Render backend.`;
+          }
+          return errObj.message.trim();
+        }
+      }
       if (data.errors && typeof data.errors === 'object') {
-        for (const errs of Object.values(data.errors as Record<string, unknown>)) {
-          if (Array.isArray(errs) && typeof errs[0] === 'string') return errs[0];
-          if (typeof errs === 'string') return errs;
-        }
+        const extracted = toErrorMessage(data.errors, '');
+        if (extracted) return extracted;
       }
-      if (Array.isArray(data.non_field_errors) && typeof data.non_field_errors[0] === 'string') {
-        return data.non_field_errors[0];
+      if (Array.isArray(data.non_field_errors)) {
+        const extracted = toErrorMessage(data.non_field_errors, '');
+        if (extracted) return extracted;
       }
-      for (const value of Object.values(data)) {
-        if (Array.isArray(value) && typeof value[0] === 'string') {
-          return value[0];
-        }
-        if (typeof value === 'string') {
-          return value;
-        }
-      }
+      const fallbackExtracted = toErrorMessage(data, '');
+      if (fallbackExtracted) return fallbackExtracted;
     }
     if (!err.response) {
       return `Cannot reach the Django backend at ${API_BASE_URL}. Check that VITE_API_BASE_URL is correct and that the backend allows this origin (FRONTEND_URL).`;
+    }
+    if (err.response.status === 404) {
+      return `API route not found (HTTP 404) at ${API_BASE_URL}. Verify VITE_API_BASE_URL in Vercel points to your Render backend.`;
     }
     if (err.response.status >= 500) {
       return `The backend at ${API_BASE_URL} failed to handle this request (HTTP ${err.response.status}). Open ${HEALTH_URL} to see whether the deployed database is reachable and migrated.`;
     }
   }
-  return err instanceof Error ? err.message : fallback;
+  return toErrorMessage(err, fallback);
 }
 
 apiClient.interceptors.request.use((config) => {
+  if (config.url) {
+    // Strip any accidental literal colon before path parameters (e.g. `/send-code/:1` -> `/send-code/1`)
+    // and avoid duplicate `/api/api/` prefixes when baseURL already ends with `/api`.
+    config.url = config.url
+      .replace(/\/:([^/]+)/g, '/$1')
+      .replace(/^\/api(\/|$)/, '/');
+  }
   const token =
     localStorage.getItem(TOKEN_STORAGE_KEY) || sessionStorage.getItem(TOKEN_STORAGE_KEY);
   if (token) {

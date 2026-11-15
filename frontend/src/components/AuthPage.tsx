@@ -6,6 +6,7 @@ import {
   describeApiError,
   searchPlaceApi,
   sendEmailCodeApi,
+  toErrorMessage,
   verifyEmailCodeApi,
 } from '../services/api';
 import type { PlaceResult } from '../services/api';
@@ -121,13 +122,21 @@ export default function AuthPage() {
     try {
       const res = await sendEmailCodeApi(normalized);
       if (!res.ok) {
-        setError(res.error || 'Could not send code.');
+        setError(toErrorMessage(res.error, 'Could not send code.'));
         return;
       }
       setEmailOtpOpen(true);
-      setEmailStatus(`Verification code sent to ${normalized}.`);
+      setEmailStatus(
+        res.dev_code
+          ? `Verification code sent to ${normalized} (Dev code: ${res.dev_code}).`
+          : `Verification code sent to ${normalized}.`,
+      );
     } catch (err: any) {
-      setError(describeApiError(err, 'Could not send code.'));
+      const errorMessage =
+        err?.response?.data?.error?.message ||
+        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
+        describeApiError(err, 'Could not send code.');
+      setError(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
     } finally {
       setSendingEmailCode(false);
     }
@@ -143,7 +152,7 @@ export default function AuthPage() {
     try {
       const res = await verifyEmailCodeApi(email.trim().toLowerCase(), emailOtpCode.trim());
       if (!res.ok) {
-        setError(res.error || 'Verification failed.');
+        setError(toErrorMessage(res.error, 'Verification failed.'));
         return;
       }
       setEmailVerified(true);
@@ -151,7 +160,11 @@ export default function AuthPage() {
       setEmailOtpOpen(false);
       setEmailStatus('Email address verified.');
     } catch (err: any) {
-      setError(describeApiError(err, 'Verification failed.'));
+      const errorMessage =
+        err?.response?.data?.error?.message ||
+        (typeof err?.response?.data?.error === 'string' ? err.response.data.error : null) ||
+        describeApiError(err, 'Verification failed.');
+      setError(typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage));
     } finally {
       setVerifyingEmailCode(false);
     }
@@ -187,7 +200,7 @@ export default function AuthPage() {
     try {
       await login(loginEmail, loginPassword, rememberMe);
     } catch (err: any) {
-      setError(err?.message || 'Login failed.');
+      setError(toErrorMessage(err, 'Login failed.'));
     } finally {
       setStage('idle');
     }
@@ -270,7 +283,7 @@ export default function AuthPage() {
         setStage,
       );
     } catch (err: any) {
-      setError(err?.message || 'Registration failed.');
+      setError(toErrorMessage(err, 'Registration failed.'));
     } finally {
       setStage('idle');
     }
@@ -310,7 +323,7 @@ export default function AuthPage() {
 
               {error && (
                 <div className="mt-5 rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-400" role="alert">
-                  {error}
+                  {typeof error === 'string' ? error : JSON.stringify(error)}
                 </div>
               )}
 
@@ -429,7 +442,7 @@ export default function AuthPage() {
 
               {error && (
                 <div className="mt-5 rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-400" role="alert">
-                  {error}
+                  {typeof error === 'string' ? error : JSON.stringify(error)}
                 </div>
               )}
 

@@ -34,7 +34,7 @@ from .forms import (
     FarmerSetPasswordForm,
     FarmerSignupForm,
 )
-from .models import FarmerProfile
+from .models import EmailVerification, FarmerProfile
 from telemetry.views import compute_and_save_farmer_telemetry
 from terrain.views import compute_and_save_farmer_terrain
 from .services import (
@@ -219,6 +219,14 @@ def farmer_signup_api(request):
 
     verified = request.session.get('farmer_email_verified') or {}
     verified_email = verified.get('email')
+    if not verified_email or verified_email != form.cleaned_data['email']:
+        recent_verified = EmailVerification.objects.filter(
+            email=form.cleaned_data['email'],
+            consumed_at__isnull=False,
+            consumed_at__gte=timezone.now() - timezone.timedelta(minutes=30),
+        ).exists()
+        if recent_verified:
+            verified_email = form.cleaned_data['email']
     if not verified_email or verified_email != form.cleaned_data['email']:
         return JsonResponse(
             {

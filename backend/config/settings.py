@@ -271,12 +271,18 @@ if RENDER_EXTERNAL_HOSTNAME:
     CSRF_TRUSTED_ORIGINS.append(_RENDER_ORIGIN)
 
 CORS_ALLOWED_ORIGINS = _unique(CORS_ALLOWED_ORIGINS)
-CSRF_TRUSTED_ORIGINS = _unique(CSRF_TRUSTED_ORIGINS)
+CSRF_TRUSTED_ORIGINS = _unique(
+    CSRF_TRUSTED_ORIGINS + ['https://*.vercel.app', 'https://*.onrender.com']
+)
 
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https://[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*\.vercel\.app$',
+    r'^https://[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*\.onrender\.com$',
+]
 if DEBUG:
     # Accept any localhost/127.0.0.1 port in development so `npm run dev` keeps
     # working when Vite falls back to 5174, 5175, ... because 5173 is taken.
-    CORS_ALLOWED_ORIGIN_REGEXES = [r'^http://(localhost|127\.0\.0\.1):\d+$']
+    CORS_ALLOWED_ORIGIN_REGEXES.append(r'^http://(localhost|127\.0\.0\.1):\d+$')
 
 # Google Earth Engine credentials for Module 1 & Module 2
 # On Render a Secret File can be mounted at /etc/secrets/gee-key.json.

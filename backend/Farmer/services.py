@@ -239,6 +239,15 @@ def verify_email_code(
         .first()
     )
     if verification is None:
+        verification = (
+            EmailVerification.objects.filter(
+                email=email,
+                consumed_at__isnull=True,
+            )
+            .order_by('-created_at')
+            .first()
+        )
+    if verification is None:
         raise PhoneVerificationError('Request a new verification code.')
 
     if verification.expires_at <= now:

@@ -9,6 +9,7 @@ const DJANGO_DEV_SERVER = 'http://127.0.0.1:8000';
 // to configure - including when the dev server is reached through a tunnel.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  envPrefix: ['VITE_', 'REACT_APP_', 'NEXT_PUBLIC_'],
   server: {
     proxy: {
       '/api': {

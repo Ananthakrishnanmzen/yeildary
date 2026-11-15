@@ -5,6 +5,7 @@ import {
   loginFarmerApi,
   REFRESH_STORAGE_KEY,
   signupFarmerApi,
+  toErrorMessage,
   TOKEN_STORAGE_KEY,
 } from '../services/api';
 import type { FarmerProfile } from '../types/farmer';
@@ -150,8 +151,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         if (!res.ok || !res.access || !res.refresh) {
           const msg = res.errors
-            ? Object.values(res.errors).flat()[0] || res.error || 'Registration failed.'
-            : res.error || 'Registration failed.';
+            ? toErrorMessage(res.errors, toErrorMessage(res.error, 'Registration failed.'))
+            : toErrorMessage(res.error, 'Registration failed.');
           throw new Error(msg);
         }
         localStorage.setItem(TOKEN_STORAGE_KEY, res.access);

@@ -16,17 +16,27 @@ urlpatterns = [
         views.ResearcherPlaceholderView.as_view(),
         name='researcher_placeholder',
     ),
-    # Farmer SMS / Firebase phone verification.
+    # Farmer SMS / Firebase phone verification & email OTP verification.
     path('api/phone/send-code/', views.phone_send_code, name='phone_send_code'),
+    path('api/phone/send-code', views.phone_send_code, name='phone_send_code_no_slash'),
     path('api/phone/verify-code/', views.phone_verify_code, name='phone_verify_code'),
+    path('api/phone/verify-code', views.phone_verify_code, name='phone_verify_code_no_slash'),
     path(
         'api/phone/verify-firebase/',
         views.phone_verify_firebase,
         name='phone_verify_firebase',
     ),
+    path(
+        'api/phone/verify-firebase',
+        views.phone_verify_firebase,
+        name='phone_verify_firebase_no_slash',
+    ),
     path('api/farmer/signup/', views.farmer_signup_api, name='farmer_signup_api'),
+    path('api/farmer/signup', views.farmer_signup_api, name='farmer_signup_api_no_slash'),
     path('api/email/send-code/', views.email_send_code, name='email_send_code'),
+    path('api/email/send-code', views.email_send_code, name='email_send_code_no_slash'),
     path('api/email/verify-code/', views.email_verify_code, name='email_verify_code'),
+    path('api/email/verify-code', views.email_verify_code, name='email_verify_code_no_slash'),
     # Password reset (email link uses the console backend in development).
     path(
         'password-reset/',
