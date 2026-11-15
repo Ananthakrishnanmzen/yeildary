@@ -371,7 +371,7 @@ export default function TelemetryFusionPanel({ telemetry, terrain }: TelemetryFu
               {siTab === 'heuristic' && (
                 <p>
                   <strong className="text-white">Multi-Objective Heuristic &amp; LLM Synthesis:</strong>{' '}
-                  Weighted Matrix + Gemini 2.5 Flash balancing soil recovery, market volatility, and farmer constraints.
+                  Weighted Matrix + Precision AI Synthesis balancing soil recovery, market volatility, and farmer constraints.
                 </p>
               )}
             </div>

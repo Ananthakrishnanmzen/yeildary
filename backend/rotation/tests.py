@@ -1,6 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -142,3 +143,126 @@ class Module3RotationTests(TestCase):
         self.assertEqual(scheme_res.status_code, 200)
         self.assertGreater(scheme_res.data['total_matched'], 0)
 
+    def test_voice_chat_gemini_integration(self):
+        voice_res = self.client.post(
+            '/api/voice/chat/',
+            {
+                'query_text': 'how to protect banana from leaf spot?',
+                'language': 'en',
+            },
+            format='json',
+        )
+        self.assertEqual(voice_res.status_code, 200)
+        self.assertIn('answer_text', voice_res.data)
+        self.assertEqual(voice_res.data['detected_intent'], 'Pest & Disease Advisory')
+
+    def test_voice_chat_direct_profile_records(self):
+        voice_res = self.client.post(
+            '/api/voice/chat/',
+            {
+                'query_text': 'what is my farm profile?',
+                'language': 'en',
+            },
+            format='json',
+        )
+        self.assertEqual(voice_res.status_code, 200)
+        self.assertEqual(voice_res.data['detected_intent'], 'Farm Land & Crop Records')
+        self.assertTrue(voice_res.data.get('farmer_context_used', False))
+        self.assertIn('2.5', voice_res.data['answer_text'])
+
+    def test_voice_chat_farmer_crops_query(self):
+        voice_res = self.client.post(
+            '/api/voice/chat/',
+            {
+                'query_text': 'what crops do I grow on my land?',
+                'language': 'en',
+            },
+            format='json',
+        )
+        self.assertEqual(voice_res.status_code, 200)
+        self.assertEqual(voice_res.data['detected_intent'], 'Farm Land & Crop Records')
+        self.assertTrue(voice_res.data.get('farmer_context_used', False))
+        self.assertTrue('Cardamom' in voice_res.data['answer_text'] or 'Black Pepper' in voice_res.data['answer_text'])
+
+    def test_voice_chat_farmer_acreage_query(self):
+        voice_res = self.client.post(
+            '/api/voice/chat/',
+            {
+                'query_text': 'how much land acreage do I have?',
+                'language': 'en',
+            },
+            format='json',
+        )
+        self.assertEqual(voice_res.status_code, 200)
+        self.assertEqual(voice_res.data['detected_intent'], 'Farm Land & Crop Records')
+        self.assertTrue(voice_res.data.get('farmer_context_used', False))
+        self.assertIn('2.5', voice_res.data['answer_text'])
+
+    def test_voice_chat_indirect_land_problem(self):
+        voice_res = self.client.post(
+            '/api/voice/chat/',
+            {
+                'query_text': 'what is the problem on my land?',
+                'language': 'en',
+            },
+            format='json',
+        )
+        self.assertEqual(voice_res.status_code, 200)
+        self.assertEqual(voice_res.data['detected_intent'], 'Farm Land Diagnostics')
+        self.assertTrue(voice_res.data.get('farmer_context_used', False))
+        self.assertIn('Water Stress', voice_res.data['answer_text'])
+
+    def test_voice_chat_indirect_crop_improvement(self):
+        voice_res = self.client.post(
+            '/api/voice/chat/',
+            {
+                'query_text': 'how can I improve my crop growing?',
+                'language': 'en',
+            },
+            format='json',
+        )
+        self.assertEqual(voice_res.status_code, 200)
+        self.assertEqual(voice_res.data['detected_intent'], 'Crop Improvement Strategy')
+        self.assertTrue(voice_res.data.get('farmer_context_used', False))
+        self.assertIn('improve', voice_res.data['answer_text'].lower())
+
+    def test_diagnostics_scan_valid_leaf_upload(self):
+        fake_image = SimpleUploadedFile("banana_sigatoka_leaf.jpg", b"fake_jpeg_bytes", content_type="image/jpeg")
+        res = self.client.post("/api/diagnostics/scan/", {"file": fake_image}, format="multipart")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data.get("is_valid_specimen", False))
+        self.assertIn("Sigatoka", res.data["diagnosis_badge"])
+        self.assertGreater(len(res.data.get("organic_remediation", [])), 0)
+        self.assertGreater(len(res.data.get("chemical_schedule", [])), 0)
+        self.assertGreater(len(res.data.get("soil_amendment", [])), 0)
+
+    def test_diagnostics_scan_soil_health_card(self):
+        fake_card = SimpleUploadedFile("soil_health_card.png", b"fake_png_bytes", content_type="image/png")
+        res = self.client.post("/api/diagnostics/scan/", {"file": fake_card}, format="multipart")
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.data.get("is_valid_specimen", False))
+        self.assertEqual(res.data.get("specimen_type"), "soil_health_card")
+        self.assertIn("Acidic", res.data["diagnosis_badge"])
+
+    def test_diagnostics_scan_invalid_file_extension(self):
+        fake_pdf = SimpleUploadedFile("document.pdf", b"%PDF-fake", content_type="application/pdf")
+        res = self.client.post("/api/diagnostics/scan/", {"file": fake_pdf}, format="multipart")
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(res.data.get("is_valid_specimen", True))
+        self.assertIn("Unsupported file format", res.data["message"])
+
+    def test_diagnostics_scan_exceeds_size_limit(self):
+        huge_bytes = b"0" * (25 * 1024 * 1024 + 1024)
+        huge_file = SimpleUploadedFile("huge_field_leaf.jpg", huge_bytes, content_type="image/jpeg")
+        res = self.client.post("/api/diagnostics/scan/", {"file": huge_file}, format="multipart")
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(res.data.get("is_valid_specimen", True))
+        self.assertIn("exceeds the 25MB limit", res.data["message"])
+
+    def test_diagnostics_scan_non_agricultural_image(self):
+        fake_car = SimpleUploadedFile("car_photo.jpg", b"fake_bytes", content_type="image/jpeg")
+        res = self.client.post("/api/diagnostics/scan/", {"file": fake_car}, format="multipart")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data.get("is_valid_specimen", True))
+        self.assertEqual(res.data.get("specimen_type"), "unrecognized")
+        self.assertIn("not appear to be an agricultural field leaf specimen", res.data.get("rejection_reason", ""))

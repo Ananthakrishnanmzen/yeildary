@@ -28,8 +28,16 @@ def _load_dotenv(env_path: Path) -> None:
 
 
 _load_dotenv(BASE_DIR / '.env')
+_load_dotenv(BASE_DIR.parent / '.env')
+_load_dotenv(BASE_DIR.parent / 'frontend' / '.env')
 
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+GEMINI_API_KEY = (
+    os.environ.get('GEMINI_API_KEY')
+    or os.environ.get('GOOGLE_API_KEY')
+    or os.environ.get('VITE_GEMINI_API_KEY')
+    or ''
+).strip()
+GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash').strip()
 
 SECRET_KEY = os.environ.get(
     'DJANGO_SECRET_KEY',
