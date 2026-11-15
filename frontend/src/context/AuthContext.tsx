@@ -45,7 +45,11 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function extractApiError(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err)) {
-    const data = err.response?.data as Record<string, unknown> | undefined;
+    const rawData = err.response?.data;
+    const data =
+      rawData && typeof rawData === 'object' && !Array.isArray(rawData)
+        ? (rawData as Record<string, unknown>)
+        : undefined;
     if (data) {
       if (typeof data.detail === 'string') return data.detail;
       if (typeof data.error === 'string' && data.error) return data.error;
@@ -69,6 +73,9 @@ function extractApiError(err: unknown, fallback: string): string {
     }
     if (!err.response) {
       return 'Cannot reach the Django backend at http://localhost:8000. Ensure the server is running.';
+    }
+    if (err.response.status >= 500) {
+      return 'Server error (500). Please ensure database migrations are applied (python manage.py migrate).';
     }
   }
   return err instanceof Error ? err.message : fallback;
