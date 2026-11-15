@@ -16,6 +16,7 @@ from django.contrib.auth.views import (
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
+from django.core.mail import send_mail
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -37,6 +38,8 @@ from telemetry.views import compute_and_save_farmer_telemetry
 from terrain.views import compute_and_save_farmer_terrain
 from .services import (
     PhoneVerificationError,
+    create_email_verification,
+    verify_email_code,
     create_phone_verification,
     mask_phone_number,
     normalize_phone_number,
@@ -170,6 +173,7 @@ def farmer_signup(request):
                 )
             else:
                 request.session.pop('farmer_phone_verified', None)
+                request.session.pop('farmer_email_verified', None)
                 login(request, user, backend='Farmer.backends.EmailBackend')
                 messages.success(
                     request,
@@ -212,15 +216,15 @@ def farmer_signup_api(request):
             errors[field] = [str(e) for e in errs]
         return JsonResponse({'ok': False, 'errors': errors}, status=400)
 
-    verified = request.session.get('farmer_phone_verified') or {}
-    verified_phone = verified.get('phone')
-    if not verified_phone or verified_phone != form.cleaned_data['phone_number']:
+    verified = request.session.get('farmer_email_verified') or {}
+    verified_email = verified.get('email')
+    if not verified_email or verified_email != form.cleaned_data['email']:
         return JsonResponse(
             {
                 'ok': False,
                 'errors': {
-                    'phone_number': [
-                        'Verify this phone number with the SMS code before creating '
+                    'email': [
+                        'Verify this email address with the code before creating '
                         'your account.'
                     ]
                 },
@@ -239,7 +243,8 @@ def farmer_signup_api(request):
             profile = FarmerProfile.objects.create(
                 user=user,
                 phone_number=form.cleaned_data['phone_number'],
-                phone_verified=True,
+                phone_verified=False,
+                email_verified=True,
                 full_name=form.cleaned_data['name'],
                 location_name=form.cleaned_data['place_name'],
                 name=form.cleaned_data['name'],
@@ -261,6 +266,7 @@ def farmer_signup_api(request):
         )
 
     request.session.pop('farmer_phone_verified', None)
+    request.session.pop('farmer_email_verified', None)
 
     def _precompute(profile_id: int) -> None:
         try:
@@ -431,6 +437,68 @@ def phone_verify_firebase(request):
     )
 
 
+@csrf_exempt
+@require_POST
+def email_send_code(request):
+    payload = _json_body(request)
+    email = (payload.get('email') or '').strip().lower()
+    if not email:
+        return JsonResponse({'ok': False, 'error': 'Enter an email address.'}, status=400)
+
+    dev_mode = getattr(settings, 'PHONE_VERIFICATION_DEV_MODE', settings.DEBUG)
+    # In development we always return the code; in production an email is sent.
+    session_key = _ensure_session_key(request)
+    try:
+        _verification, code = create_email_verification(email, session_key)
+    except PhoneVerificationError as exc:
+        return JsonResponse({'ok': False, 'error': exc.message}, status=exc.status)
+
+    try:
+        send_mail(
+            subject='Yieldary AI verification code',
+            message=f'Your verification code is: {code}\nIt expires in 5 minutes.',
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@yieldary.ai'),
+            recipient_list=[email],
+            fail_silently=True,
+        )
+    except Exception:
+        logger.exception('Failed to send verification email to %s', email)
+
+    response = {
+        'ok': True,
+        'message': f'Verification code sent to {email}.',
+        'email': email,
+    }
+    if dev_mode:
+        response['dev_code'] = code
+        response['message'] = 'Development mode: use the code shown below.'
+    return JsonResponse(response)
+
+
+@csrf_exempt
+@require_POST
+def email_verify_code(request):
+    payload = _json_body(request)
+    email = (payload.get('email') or '').strip().lower()
+    code = str(payload.get('code', '')).strip()
+    if not email:
+        return JsonResponse({'ok': False, 'error': 'Enter an email address.'}, status=400)
+    if not code:
+        return JsonResponse({'ok': False, 'error': 'Enter the verification code.'}, status=400)
+
+    session_key = _ensure_session_key(request)
+    try:
+        verify_email_code(email, session_key, code)
+    except PhoneVerificationError as exc:
+        return JsonResponse({'ok': False, 'error': exc.message}, status=exc.status)
+
+    request.session['farmer_email_verified'] = {
+        'email': email,
+        'verified_at': timezone.now().isoformat(),
+    }
+    return JsonResponse({'ok': True, 'message': f'{email} verified successfully.', 'email': email})
+
+
 class FarmerPasswordResetView(PasswordResetView):
     template_name = 'Farmer/password_reset_form.html'
     email_template_name = 'Farmer/password_reset_email.html'
@@ -460,3 +528,4 @@ class ResearcherPlaceholderView(TemplateView):
 
 class LegalView(TemplateView):
     template_name = 'Farmer/legal.html'
+# TEST MARKER

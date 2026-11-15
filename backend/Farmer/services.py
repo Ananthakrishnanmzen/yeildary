@@ -22,7 +22,7 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from .models import PhoneVerification
+from .models import EmailVerification, PhoneVerification
 
 PHONE_RE = re.compile(r'^\+[1-9]\d{7,14}$')
 
@@ -182,3 +182,84 @@ def verify_firebase_id_token(id_token: str, api_key: str) -> str:
             'The verified Firebase account has no phone number.'
         )
     return normalize_phone_number(phone_number)
+
+# ---------------------------------------------------------------------------
+# Email verification helpers (mirror of the SMS flow, but delivered by email).
+# ---------------------------------------------------------------------------
+
+
+def create_email_verification(
+    email: str,
+    session_key: str,
+) -> tuple[EmailVerification, str]:
+    """Create a new email code, invalidating older pending codes for this email."""
+
+    now = timezone.now()
+    cooldown = int(getattr(settings, 'PHONE_VERIFICATION_RESEND_SECONDS', 60))
+    if cooldown > 0 and EmailVerification.objects.filter(
+        email=email,
+        created_at__gte=now - timedelta(seconds=cooldown),
+    ).exists():
+        raise PhoneVerificationError(
+            f'Please wait {cooldown} seconds before requesting another code.',
+            status=429,
+        )
+
+    EmailVerification.objects.filter(
+        email=email,
+        consumed_at__isnull=True,
+    ).update(consumed_at=now)
+
+    code = f'{secrets.randbelow(1_000_000):06d}'
+    ttl = int(getattr(settings, 'PHONE_VERIFICATION_CODE_TTL', 300))
+    verification = EmailVerification.objects.create(
+        email=email,
+        session_key=session_key,
+        code_hash=make_password(code),
+        expires_at=now + timedelta(seconds=ttl),
+    )
+    return verification, code
+
+
+def verify_email_code(
+    email: str,
+    session_key: str,
+    code: str,
+) -> EmailVerification:
+    """Validate an email verification code for the current browser session."""
+
+    now = timezone.now()
+    verification = (
+        EmailVerification.objects.filter(
+            email=email,
+            session_key=session_key,
+            consumed_at__isnull=True,
+        )
+        .order_by('-created_at')
+        .first()
+    )
+    if verification is None:
+        raise PhoneVerificationError('Request a new verification code.')
+
+    if verification.expires_at <= now:
+        verification.consumed_at = now
+        verification.save(update_fields=['consumed_at'])
+        raise PhoneVerificationError('This verification code has expired.')
+
+    max_attempts = int(getattr(settings, 'PHONE_VERIFICATION_MAX_ATTEMPTS', 5))
+    if verification.attempts >= max_attempts:
+        raise PhoneVerificationError(
+            'Too many incorrect attempts. Request a new code.',
+            status=429,
+        )
+
+    if not check_password(code, verification.code_hash):
+        verification.attempts += 1
+        verification.save(update_fields=['attempts'])
+        remaining = max_attempts - verification.attempts
+        suffix = f' {remaining} attempt(s) remaining.' if remaining > 0 else ''
+        raise PhoneVerificationError(f'Incorrect verification code.{suffix}')
+
+    verification.consumed_at = now
+    verification.save(update_fields=['consumed_at'])
+    return verification
