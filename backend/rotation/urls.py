@@ -1,62 +1,62 @@
 from django.urls import path
 
-from . import lomura_views, views
+from . import agri_views, views
 
 urlpatterns = [
     path('module3/strategy/', views.module3_strategy_view, name='module3-strategy'),
     path('module3/recalculate/', views.module3_recalculate_view, name='module3-recalculate'),
 
-    # Lomura FPO Command Dashboard
-    path('dashboard/metrics', lomura_views.dashboard_metrics_view, name='lomura-dashboard-metrics'),
-    path('dashboard/metrics/', lomura_views.dashboard_metrics_view, name='lomura-dashboard-metrics-slash'),
-    path('dashboard/weather-forecast', lomura_views.dashboard_weather_forecast_view, name='lomura-weather-forecast'),
-    path('dashboard/weather-forecast/', lomura_views.dashboard_weather_forecast_view, name='lomura-weather-forecast-slash'),
-    path('dashboard/plots-heatmap', lomura_views.dashboard_plots_heatmap_view, name='lomura-plots-heatmap'),
-    path('dashboard/plots-heatmap/', lomura_views.dashboard_plots_heatmap_view, name='lomura-plots-heatmap-slash'),
-    path('dashboard/yield-spline', lomura_views.dashboard_yield_spline_view, name='lomura-yield-spline'),
-    path('dashboard/yield-spline/', lomura_views.dashboard_yield_spline_view, name='lomura-yield-spline-slash'),
-    path('dashboard/alerts', lomura_views.dashboard_alerts_view, name='lomura-alerts'),
-    path('dashboard/alerts/', lomura_views.dashboard_alerts_view, name='lomura-alerts-slash'),
-    path('dashboard/broadcast', lomura_views.dashboard_broadcast_view, name='lomura-broadcast'),
-    path('dashboard/broadcast/', lomura_views.dashboard_broadcast_view, name='lomura-broadcast-slash'),
+    # Agri FPO Command Dashboard
+    path('dashboard/metrics', agri_views.dashboard_metrics_view, name='agri-dashboard-metrics'),
+    path('dashboard/metrics/', agri_views.dashboard_metrics_view, name='agri-dashboard-metrics-slash'),
+    path('dashboard/weather-forecast', agri_views.dashboard_weather_forecast_view, name='agri-weather-forecast'),
+    path('dashboard/weather-forecast/', agri_views.dashboard_weather_forecast_view, name='agri-weather-forecast-slash'),
+    path('dashboard/plots-heatmap', agri_views.dashboard_plots_heatmap_view, name='agri-plots-heatmap'),
+    path('dashboard/plots-heatmap/', agri_views.dashboard_plots_heatmap_view, name='agri-plots-heatmap-slash'),
+    path('dashboard/yield-spline', agri_views.dashboard_yield_spline_view, name='agri-yield-spline'),
+    path('dashboard/yield-spline/', agri_views.dashboard_yield_spline_view, name='agri-yield-spline-slash'),
+    path('dashboard/alerts', agri_views.dashboard_alerts_view, name='agri-alerts'),
+    path('dashboard/alerts/', agri_views.dashboard_alerts_view, name='agri-alerts-slash'),
+    path('dashboard/broadcast', agri_views.dashboard_broadcast_view, name='agri-broadcast'),
+    path('dashboard/broadcast/', agri_views.dashboard_broadcast_view, name='agri-broadcast-slash'),
 
-    # Lomura Module 1: One-Tap Satellite Field Profiler & ML Crop Engine
-    path('field-profile', lomura_views.field_profile_view, name='lomura-field-profile'),
-    path('field-profile/', lomura_views.field_profile_view, name='lomura-field-profile-slash'),
-    path('predict-crop', lomura_views.predict_crop_view, name='lomura-predict-crop'),
-    path('predict-crop/', lomura_views.predict_crop_view, name='lomura-predict-crop-slash'),
+    # Agri Module 1: One-Tap Satellite Field Profiler & ML Crop Engine
+    path('field-profile', agri_views.field_profile_view, name='agri-field-profile'),
+    path('field-profile/', agri_views.field_profile_view, name='agri-field-profile-slash'),
+    path('predict-crop', agri_views.predict_crop_view, name='agri-predict-crop'),
+    path('predict-crop/', agri_views.predict_crop_view, name='agri-predict-crop-slash'),
 
-    # Lomura Module 2: 3-Season Field Shift Simulator & Sentinel-2 NDVI Decline Check
-    path('simulate-rotation', lomura_views.simulate_rotation_view, name='lomura-simulate-rotation'),
-    path('simulate-rotation/', lomura_views.simulate_rotation_view, name='lomura-simulate-rotation-slash'),
-    path('ndvi-check', lomura_views.ndvi_check_view, name='lomura-ndvi-check'),
-    path('ndvi-check/', lomura_views.ndvi_check_view, name='lomura-ndvi-check-slash'),
+    # Agri Module 2: 3-Season Field Shift Simulator & Sentinel-2 NDVI Decline Check
+    path('simulate-rotation', agri_views.simulate_rotation_view, name='agri-simulate-rotation'),
+    path('simulate-rotation/', agri_views.simulate_rotation_view, name='agri-simulate-rotation-slash'),
+    path('ndvi-check', agri_views.ndvi_check_view, name='agri-ndvi-check'),
+    path('ndvi-check/', agri_views.ndvi_check_view, name='agri-ndvi-check-slash'),
 
-    # Lomura AI Visual Diagnostics Scanner
-    path('diagnostics/scan', lomura_views.diagnostics_scan_view, name='lomura-diagnostics-scan'),
-    path('diagnostics/scan/', lomura_views.diagnostics_scan_view, name='lomura-diagnostics-scan-slash'),
-    path('diagnostics/samples', lomura_views.diagnostics_samples_view, name='lomura-diagnostics-samples'),
-    path('diagnostics/samples/', lomura_views.diagnostics_samples_view, name='lomura-diagnostics-samples-slash'),
+    # Agri AI Visual Diagnostics Scanner
+    path('diagnostics/scan', agri_views.diagnostics_scan_view, name='agri-diagnostics-scan'),
+    path('diagnostics/scan/', agri_views.diagnostics_scan_view, name='agri-diagnostics-scan-slash'),
+    path('diagnostics/samples', agri_views.diagnostics_samples_view, name='agri-diagnostics-samples'),
+    path('diagnostics/samples/', agri_views.diagnostics_samples_view, name='agri-diagnostics-samples-slash'),
 
-    # Lomura AI4Bharat Multilingual Voice Desk
-    path('voice/process', lomura_views.voice_process_view, name='lomura-voice-process'),
-    path('voice/process/', lomura_views.voice_process_view, name='lomura-voice-process-slash'),
-    path('voice/chat', lomura_views.voice_chat_view, name='lomura-voice-chat'),
-    path('voice/chat/', lomura_views.voice_chat_view, name='lomura-voice-chat-slash'),
-    path('voice/samples', lomura_views.voice_samples_view, name='lomura-voice-samples'),
-    path('voice/samples/', lomura_views.voice_samples_view, name='lomura-voice-samples-slash'),
-    path('voice/tts', lomura_views.voice_tts_view, name='lomura-voice-tts'),
-    path('voice/tts/', lomura_views.voice_tts_view, name='lomura-voice-tts-slash'),
+    # Agri AI4Bharat Multilingual Voice Desk
+    path('voice/process', agri_views.voice_process_view, name='agri-voice-process'),
+    path('voice/process/', agri_views.voice_process_view, name='agri-voice-process-slash'),
+    path('voice/chat', agri_views.voice_chat_view, name='agri-voice-chat'),
+    path('voice/chat/', agri_views.voice_chat_view, name='agri-voice-chat-slash'),
+    path('voice/samples', agri_views.voice_samples_view, name='agri-voice-samples'),
+    path('voice/samples/', agri_views.voice_samples_view, name='agri-voice-samples-slash'),
+    path('voice/tts', agri_views.voice_tts_view, name='agri-voice-tts'),
+    path('voice/tts/', agri_views.voice_tts_view, name='agri-voice-tts-slash'),
 
-    # Lomura Farm & Farmer CRM
-    path('crm/farmers', lomura_views.crm_farmers_list_view, name='lomura-crm-farmers'),
-    path('crm/farmers/', lomura_views.crm_farmers_list_view, name='lomura-crm-farmers-slash'),
-    path('crm/farmers/<int:farmer_id>', lomura_views.crm_farmer_detail_view, name='lomura-crm-farmer-detail'),
-    path('crm/farmers/<int:farmer_id>/', lomura_views.crm_farmer_detail_view, name='lomura-crm-farmer-detail-slash'),
+    # Agri Farm & Farmer CRM
+    path('crm/farmers', agri_views.crm_farmers_list_view, name='agri-crm-farmers'),
+    path('crm/farmers/', agri_views.crm_farmers_list_view, name='agri-crm-farmers-slash'),
+    path('crm/farmers/<int:farmer_id>', agri_views.crm_farmer_detail_view, name='agri-crm-farmer-detail'),
+    path('crm/farmers/<int:farmer_id>/', agri_views.crm_farmer_detail_view, name='agri-crm-farmer-detail-slash'),
 
-    # Lomura Government Scheme Discoverability Wizard
-    path('schemes', lomura_views.schemes_list_view, name='lomura-schemes'),
-    path('schemes/', lomura_views.schemes_list_view, name='lomura-schemes-slash'),
-    path('schemes/match', lomura_views.schemes_match_view, name='lomura-schemes-match'),
-    path('schemes/match/', lomura_views.schemes_match_view, name='lomura-schemes-match-slash'),
+    # Agri Government Scheme Discoverability Wizard
+    path('schemes', agri_views.schemes_list_view, name='agri-schemes'),
+    path('schemes/', agri_views.schemes_list_view, name='agri-schemes-slash'),
+    path('schemes/match', agri_views.schemes_match_view, name='agri-schemes-match'),
+    path('schemes/match/', agri_views.schemes_match_view, name='agri-schemes-match-slash'),
 ]

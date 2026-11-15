@@ -75,7 +75,7 @@ class EmailTokenObtainPairView(TokenObtainPairView):
 
 
 class ProfileView(APIView):
-    """GET /api/profile/ — Return the authenticated farmer's profile details, or Lomura Field Profile when ?lat=&lon= are provided."""
+    """GET /api/profile/ — Return the authenticated farmer's profile details, or Agri Field Profile when ?lat=&lon= are provided."""
 
     permission_classes = [IsAuthenticated]
 
@@ -86,7 +86,7 @@ class ProfileView(APIView):
 
     def get(self, request: Request) -> Response:
         if 'lat' in request.query_params and 'lon' in request.query_params:
-            from rotation.services.lomura_services import build_field_profile
+            from rotation.services.agri_services import build_field_profile
             try:
                 lat = float(request.query_params.get('lat', 9.8959))
                 lon = float(request.query_params.get('lon', 76.7184))

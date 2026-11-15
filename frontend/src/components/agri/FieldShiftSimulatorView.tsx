@@ -42,7 +42,7 @@ export default function FieldShiftSimulatorView() {
       <div className="rounded-2xl bg-[#0E1015]/90 border border-white/10 p-5 shadow-2xl">
         <div className="flex items-center gap-2 text-xs font-semibold text-[#84CC16] uppercase tracking-wider">
           <RotateCw className="w-4 h-4" />
-          <span>Lomura Module 2: 3-Season Field Shift Multi-Cropping Simulator</span>
+          <span>Module 2: 3-Season Field Shift Multi-Cropping Simulator</span>
         </div>
         <h2 className="text-xl font-bold text-white mt-1">
           3-Season Kharif &rarr; Rabi &rarr; Zaid Rotation Simulator

@@ -11,7 +11,6 @@ from rotation.services.gemini_advisor import generate_rotation_strategies
 from telemetry.models import FieldTelemetry
 from terrain.models import SoilAndErosion
 
-
 class Module3RotationTests(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -105,7 +104,7 @@ class Module3RotationTests(TestCase):
             self.assertIn('forage_biomass_potential', recalc.data['data']['resilience_build'])
             self.assertTrue(recalc.data['data']['local_expertise_charter'])
 
-    def test_lomura_suite_endpoints(self):
+    def test_agri_suite_endpoints(self):
         metrics_res = self.client.get('/api/dashboard/metrics/')
         self.assertEqual(metrics_res.status_code, 200)
         self.assertIn('cluster_name', metrics_res.data)
@@ -241,7 +240,7 @@ class Module3RotationTests(TestCase):
         res = self.client.post("/api/diagnostics/scan/", {"file": fake_card}, format="multipart")
         self.assertEqual(res.status_code, 200)
         self.assertTrue(res.data.get("is_valid_specimen", False))
-        self.assertEqual(res.data.get("specimen_type"), "soil_health_card")
+        self.assertEqual(res.data.get("specimen_type"), "soil_report")
         self.assertIn("Acidic", res.data["diagnosis_badge"])
 
     def test_diagnostics_scan_invalid_file_extension(self):
@@ -265,4 +264,18 @@ class Module3RotationTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertFalse(res.data.get("is_valid_specimen", True))
         self.assertEqual(res.data.get("specimen_type"), "unrecognized")
-        self.assertIn("not appear to be an agricultural field leaf specimen", res.data.get("rejection_reason", ""))
+        self.assertIn("only scans Soil Reports and Crop Leaf Images", res.data.get("rejection_reason", ""))
+    def test_diagnostics_samples_excludes_soil_health_card(self):
+        res = self.client.get("/api/diagnostics/samples/")
+        self.assertEqual(res.status_code, 200)
+        sample_ids = [s["id"] for s in res.data]
+        self.assertNotIn("soil_health_card", sample_ids)
+        for s in res.data:
+            self.assertTrue("leaf" in s["name"].lower() or "foliage" in s["name"].lower())
+
+    def test_diagnostics_scan_non_leaf_non_soil_rejected(self):
+        fake_dog = SimpleUploadedFile("pet_dog_face.jpg", b"fake_bytes", content_type="image/jpeg")
+        res = self.client.post("/api/diagnostics/scan/", {"file": fake_dog}, format="multipart")
+        self.assertEqual(res.status_code, 200)
+        self.assertFalse(res.data.get("is_valid_specimen", True))
+        self.assertEqual(res.data.get("specimen_type"), "unrecognized")

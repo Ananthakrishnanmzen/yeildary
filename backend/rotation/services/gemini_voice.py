@@ -15,7 +15,6 @@ from rotation.services.gemini_advisor import FALLBACK_MODELS
 
 logger = logging.getLogger(__name__)
 
-
 class VoiceConversationResponseSchema(BaseModel):
     user_transcript: str = Field(
         description="The transcribed or normalized user inquiry in the original spoken language"
@@ -29,7 +28,6 @@ class VoiceConversationResponseSchema(BaseModel):
     translated_en: str = Field(
         description="English translation or summary of the answer for admin logs and preview"
     )
-
 
 def handle_gemini_voice_conversation(
     query_text: str = "",

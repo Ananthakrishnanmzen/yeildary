@@ -22,12 +22,12 @@ import { fetchFarmerTelemetryApi, fetchFarmerTerrainApi } from '../services/api'
 import type { TelemetryReport, TerrainReport, WaterStressSeriesItem } from '../types/farmer';
 import RotationStrategyModule from './RotationStrategyModule';
 import { ScienceInfo } from './ScienceGlossaryInfo';
-import DiagnosticsScannerView from './lomura/DiagnosticsScannerView';
-import FarmerCrmView from './lomura/FarmerCrmView';
-import FieldShiftSimulatorView from './lomura/FieldShiftSimulatorView';
-import FpoCommandView from './lomura/FpoCommandView';
-import SchemesWizardView from './lomura/SchemesWizardView';
-import VoiceDeskView from './lomura/VoiceDeskView';
+import DiagnosticsScannerView from './agri/DiagnosticsScannerView';
+import FarmerCrmView from './agri/FarmerCrmView';
+import FieldShiftSimulatorView from './agri/FieldShiftSimulatorView';
+import FpoCommandView from './agri/FpoCommandView';
+import SchemesWizardView from './agri/SchemesWizardView';
+import VoiceDeskView from './agri/VoiceDeskView';
 
 type ActiveSuiteTab =
   | 'mission_control'
@@ -266,7 +266,7 @@ export default function FarmerDashboard() {
             </span>
             <span className="hidden sm:inline-block h-4 w-px bg-white/15" />
             <span className="hidden sm:inline-block text-xs text-slate-400 truncate">
-              Vulnerability &amp; Stress Telemetry + Lomura FPO Suite
+              Vulnerability &amp; Stress Telemetry + Precision Agri Suite
             </span>
           </div>
 
@@ -294,7 +294,7 @@ export default function FarmerDashboard() {
           </div>
         </div>
 
-        {/* Unified Yieldary + Lomura Module Navigation Strip */}
+        {/* Unified Yieldary + Precision Agri Module Navigation Strip */}
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 pb-2.5 flex items-center gap-1.5 overflow-x-auto">
           {[
             { id: 'mission_control' as const, label: 'Mission Control (GEE 1–3)', icon: LayoutDashboard },
