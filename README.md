@@ -115,3 +115,42 @@ If `/api/health/` returns `503`, the deployment is broken rather than the fronte
 - [ ] `GET https://yeildary.onrender.com/api/health/` returns `200`.
 - [ ] Backend secrets set in the Render dashboard (`DJANGO_SECRET_KEY`, `GEMINI_API_KEY`, `EMAIL_*`).
 - [ ] Registration, login and a dashboard API request tested on the deployed site.
+
+## Troubleshooting
+
+### Every API call returns `500` (and `/api/health/` says migrations are pending)
+
+The service's **Build Command** is not the one in `render.yaml`. A Render web
+service created by hand keeps its own build command, so `collectstatic` and
+`migrate` never run. Symptoms together:
+
+- every data-backed call fails with a bare `500` (`/api/token/`, `/api/register/`,
+  `/api/email/send-code/`), while endpoints that do no database work succeed,
+- `/static/...` files return `404`, so the server-rendered pages are unstyled.
+
+Set the Build Command in **Render → the web service → Settings** to:
+
+```bash
+pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate --noinput
+```
+
+and confirm `DATABASE_URL` points at a live database, then redeploy.
+`GET /api/health/` should return `200 {"ok": true, "database": "ok"}`; it reports
+pending migrations explicitly.
+
+Running `python manage.py migrate` once in the Render **Shell** unblocks the
+current instance, but the fix is not durable: without `migrate` in the build
+command (and without a persistent PostgreSQL database) the tables disappear on
+the next deploy or restart.
+
+### `Network Error` in the browser with no HTTP status
+
+The API host baked into the bundle is wrong or not trusted. Confirm the deployed
+bundle's URL with:
+
+```bash
+curl -s https://www.yieldary.us/ | grep -o 'assets/[^"]*\.js'
+```
+
+then check that host in the downloaded asset. A request whose preflight gets no
+`Access-Control-Allow-Origin` header surfaces in Axios as a network error.

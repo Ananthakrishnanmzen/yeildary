@@ -46,7 +46,7 @@ class FarmerAuthFlowTests(APITestCase):
 
 
 class HealthCheckTests(APITestCase):
-    def test_health_reports_ok_when_database_is_reachable(self):
+    def test_health_reports_ok_when_database_is_migrated(self):
         response = self.client.get(reverse('accounts:health'))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, {'ok': True, 'database': 'ok'})
@@ -65,4 +65,30 @@ class HealthCheckTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertFalse(response.data['ok'])
+        self.assertEqual(response.data['database'], 'unavailable')
+
+    def test_health_reports_503_when_migrations_are_pending(self):
+        from unittest import mock
+
+        with mock.patch('accounts.views._pending_migration_count', return_value=7):
+            with self.assertLogs('accounts.views', level='ERROR'):
+                response = self.client.get(reverse('accounts:health'))
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data['pending_migrations'], 7)
+        self.assertIn('migrate', response.data['error'])
+
+    def test_health_reports_503_when_migrations_table_is_missing(self):
+        from unittest import mock
+
+        from django.db import ProgrammingError
+
+        with mock.patch(
+            'accounts.views._pending_migration_count',
+            side_effect=ProgrammingError('relation "django_migrations" does not exist'),
+        ):
+            with self.assertLogs('accounts.views', level='ERROR'):
+                response = self.client.get(reverse('accounts:health'))
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertIn('migrate', response.data['error'])

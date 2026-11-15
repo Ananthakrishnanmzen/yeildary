@@ -77,10 +77,10 @@ class EmailTokenObtainPairView(TokenObtainPairView):
 class HealthView(APIView):
     """GET /api/health/ — Liveness probe that also verifies the database.
 
-    A Render web service with an unmigrated or expired database answers every
-    data-backed request with an opaque 500, which the React app can only report
-    as a generic failure. This endpoint makes that state explicit and is used as
-    the Render health check path.
+    A Render web service whose database is expired, unreachable or unmigrated
+    answers every data-backed request with an opaque 500, which the React app can
+    only report as a generic failure. This endpoint makes that state explicit and
+    doubles as the Render health check path.
     """
 
     permission_classes = [AllowAny]
@@ -92,18 +92,59 @@ class HealthView(APIView):
                 cursor.execute('SELECT 1')
                 cursor.fetchone()
         except Exception:
-            logger.exception('Database health check failed')
+            logger.exception('Database health check failed: server unreachable')
             return Response(
                 {
                     'ok': False,
                     'database': 'unavailable',
-                    'error': 'The database is not reachable or its tables are missing. '
-                    'Run "python manage.py migrate" against this service, and check '
-                    'that DATABASE_URL points to a live database.',
+                    'error': 'The database is not reachable. Check that DATABASE_URL '
+                    'points to a live database.',
                 },
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+        try:
+            pending = _pending_migration_count()
+        except Exception:
+            logger.exception('Database health check failed: migrations unreadable')
+            return Response(
+                {
+                    'ok': False,
+                    'database': 'reachable',
+                    'error': 'The database is reachable but not initialised. Run '
+                    '"python manage.py migrate" against this service.',
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if pending:
+            logger.error('Database health check failed: %s pending migrations', pending)
+            return Response(
+                {
+                    'ok': False,
+                    'database': 'reachable',
+                    'pending_migrations': pending,
+                    'error': f'{pending} migration(s) are not applied. Run '
+                    '"python manage.py migrate" against this service.',
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         return Response({'ok': True, 'database': 'ok'}, status=status.HTTP_200_OK)
+
+
+def _pending_migration_count() -> int:
+    """Number of migrations that have not been applied to the current database.
+
+    Raises if the ``django_migrations`` table itself is missing, which is what an
+    initialised-but-unmigrated database looks like.
+    """
+
+    from django.db.migrations.executor import MigrationExecutor
+
+    executor = MigrationExecutor(connection)
+    plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+    return len(plan)
 
 
 class ProfileView(APIView):

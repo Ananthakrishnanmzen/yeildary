@@ -49,6 +49,54 @@ export const apiClient = axios.create({
   timeout: 15000,
 });
 
+/** URL of the backend health check, which reports database/migration problems. */
+export const HEALTH_URL = `${BACKEND_BASE_URL}/api/health/`;
+
+/**
+ * Turn an API failure into a message the user can act on.
+ *
+ * API errors are JSON, but a crashed backend or a blocked request produces HTML
+ * or no response at all, so the UI would otherwise show Axios' raw
+ * "Request failed with status code 500".
+ */
+export function describeApiError(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err)) {
+    const rawData = err.response?.data;
+    const data =
+      rawData && typeof rawData === 'object' && !Array.isArray(rawData)
+        ? (rawData as Record<string, unknown>)
+        : undefined;
+    if (data) {
+      if (typeof data.detail === 'string') return data.detail;
+      if (typeof data.error === 'string' && data.error) return data.error;
+      if (data.errors && typeof data.errors === 'object') {
+        for (const errs of Object.values(data.errors as Record<string, unknown>)) {
+          if (Array.isArray(errs) && typeof errs[0] === 'string') return errs[0];
+          if (typeof errs === 'string') return errs;
+        }
+      }
+      if (Array.isArray(data.non_field_errors) && typeof data.non_field_errors[0] === 'string') {
+        return data.non_field_errors[0];
+      }
+      for (const value of Object.values(data)) {
+        if (Array.isArray(value) && typeof value[0] === 'string') {
+          return value[0];
+        }
+        if (typeof value === 'string') {
+          return value;
+        }
+      }
+    }
+    if (!err.response) {
+      return `Cannot reach the Django backend at ${API_BASE_URL}. Check that VITE_API_BASE_URL is correct and that the backend allows this origin (FRONTEND_URL).`;
+    }
+    if (err.response.status >= 500) {
+      return `The backend at ${API_BASE_URL} failed to handle this request (HTTP ${err.response.status}). Open ${HEALTH_URL} to see whether the deployed database is reachable and migrated.`;
+    }
+  }
+  return err instanceof Error ? err.message : fallback;
+}
+
 apiClient.interceptors.request.use((config) => {
   const token =
     localStorage.getItem(TOKEN_STORAGE_KEY) || sessionStorage.getItem(TOKEN_STORAGE_KEY);

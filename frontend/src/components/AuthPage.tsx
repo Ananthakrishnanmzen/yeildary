@@ -3,6 +3,7 @@ import { Loader2, MapPin, Sprout } from 'lucide-react';
 import { type AuthStage, useAuth } from '../context/AuthContext';
 import {
   BACKEND_BASE_URL,
+  describeApiError,
   searchPlaceApi,
   sendEmailCodeApi,
   verifyEmailCodeApi,
@@ -126,7 +127,7 @@ export default function AuthPage() {
       setEmailOtpOpen(true);
       setEmailStatus(`Verification code sent to ${normalized}.`);
     } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || 'Could not send code.');
+      setError(describeApiError(err, 'Could not send code.'));
     } finally {
       setSendingEmailCode(false);
     }
@@ -150,7 +151,7 @@ export default function AuthPage() {
       setEmailOtpOpen(false);
       setEmailStatus('Email address verified.');
     } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || 'Verification failed.');
+      setError(describeApiError(err, 'Verification failed.'));
     } finally {
       setVerifyingEmailCode(false);
     }

@@ -1,7 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import axios from 'axios';
 import {
-  API_BASE_URL,
+  describeApiError,
   fetchFarmerProfileApi,
   loginFarmerApi,
   REFRESH_STORAGE_KEY,
@@ -45,41 +44,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function extractApiError(err: unknown, fallback: string): string {
-  if (axios.isAxiosError(err)) {
-    const rawData = err.response?.data;
-    const data =
-      rawData && typeof rawData === 'object' && !Array.isArray(rawData)
-        ? (rawData as Record<string, unknown>)
-        : undefined;
-    if (data) {
-      if (typeof data.detail === 'string') return data.detail;
-      if (typeof data.error === 'string' && data.error) return data.error;
-      if (data.errors && typeof data.errors === 'object') {
-        for (const errs of Object.values(data.errors as Record<string, unknown>)) {
-          if (Array.isArray(errs) && typeof errs[0] === 'string') return errs[0];
-          if (typeof errs === 'string') return errs;
-        }
-      }
-      if (Array.isArray(data.non_field_errors) && typeof data.non_field_errors[0] === 'string') {
-        return data.non_field_errors[0];
-      }
-      for (const value of Object.values(data)) {
-        if (Array.isArray(value) && typeof value[0] === 'string') {
-          return value[0];
-        }
-        if (typeof value === 'string') {
-          return value;
-        }
-      }
-    }
-    if (!err.response) {
-      return `Cannot reach the Django backend at ${API_BASE_URL}. Check that VITE_API_BASE_URL is correct and that the backend allows this origin (FRONTEND_URL).`;
-    }
-    if (err.response.status >= 500) {
-      return 'Server error (500). Please ensure database migrations are applied (python manage.py migrate).';
-    }
-  }
-  return err instanceof Error ? err.message : fallback;
+  return describeApiError(err, fallback);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
