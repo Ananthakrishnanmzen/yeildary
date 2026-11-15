@@ -6,6 +6,19 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load variables from a local .env file (if present) so EMAIL_* etc. are picked up.
+_env_file = BASE_DIR / '.env'
+if _env_file.is_file():
+    with _env_file.open() as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith('#') or '=' not in _line:
+                continue
+            _key, _, _value = _line.partition('=')
+            _key = _key.strip()
+            _value = _value.strip().strip('"').strip("'")
+            os.environ.setdefault(_key, _value)
+
 
 def _load_dotenv(env_path: Path) -> None:
     if not env_path.is_file():
@@ -197,7 +210,6 @@ FIREBASE_CONFIG = {
     'storageBucket': os.environ.get('FIREBASE_STORAGE_BUCKET', ''),
 }
 
-DEFAULT_FROM_EMAIL = 'Yieldary AI <no-reply@yieldary.ai>'
 
 PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.Argon2PasswordHasher',
@@ -220,3 +232,21 @@ CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
 ]
+
+# Email (Resend SMTP in production; console backend in development by default)
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend'
+    if DEBUG
+    else 'django.core.mail.backends.smtp.EmailBackend',
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.resend.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'true').lower() == 'true'
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'false').lower() == 'true'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', 'resend')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DEFAULT_FROM_EMAIL',
+    'Yieldary AI <onboarding@resend.dev>',
+)

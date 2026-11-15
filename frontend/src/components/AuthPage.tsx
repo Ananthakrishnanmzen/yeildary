@@ -463,7 +463,19 @@ export default function AuthPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-2 block text-xs font-medium text-slate-300">Email address</label>
-                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={INPUT_CLASS} placeholder="you@example.com" autoComplete="email" />
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <div className="min-w-0 flex-1">
+                          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); if (emailVerified) { setEmailVerified(false); setVerifiedEmail(''); } }} className={INPUT_CLASS} placeholder="you@example.com" autoComplete="email" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSendEmailCode}
+                          disabled={sendingEmailCode || isBusy || !EMAIL_REGEX.test(email.trim()) || emailVerified}
+                          className="shrink-0 rounded-xl border border-lime-400/40 bg-lime-400/10 px-4 py-3 text-xs font-semibold text-lime-400 transition hover:bg-lime-400/20 focus:outline-none focus:ring-2 focus:ring-lime-400/30 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {sendingEmailCode ? 'Sending...' : emailVerified ? 'Verified' : 'Send code'}
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="mb-2 block text-xs font-medium text-slate-300">Gender</label>
@@ -485,21 +497,7 @@ export default function AuthPage() {
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-xs font-medium text-slate-300">Email verification</label>
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <div className="min-w-0 flex-1">
-                        <input type="email" value={email} readOnly className={INPUT_CLASS} placeholder="you@example.com" />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleSendEmailCode}
-                        disabled={sendingEmailCode || isBusy || !EMAIL_REGEX.test(email.trim())}
-                        className="shrink-0 rounded-xl border border-lime-400/40 bg-lime-400/10 px-4 py-3 text-xs font-semibold text-lime-400 transition hover:bg-lime-400/20 focus:outline-none focus:ring-2 focus:ring-lime-400/30 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {sendingEmailCode ? 'Sending...' : 'Send code'}
-                      </button>
-                    </div>
-
+                    <label className="mb-2 block text-xs font-medium text-slate-300">Email verification status</label>
                     <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-[11px] leading-5 text-slate-400">{emailStatus}</p>
